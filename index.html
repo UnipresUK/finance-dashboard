@@ -407,15 +407,50 @@
             color: #e2e4eb;
         }
 
+        /* Sync indicator */
+        .sync-status {
+            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .sync-status.syncing { color: var(--orange); }
+        .sync-status.synced { color: var(--green); }
+        .sync-status.offline { color: var(--red); }
+        .sync-status.none { color: var(--text-dim); }
+        .sync-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+        .sync-dot.syncing { background: var(--orange); animation: pulse 1s infinite; }
+        .sync-dot.synced { background: var(--green); }
+        .sync-dot.offline { background: var(--red); }
+        .sync-dot.none { background: var(--text-dim); }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
         /* Responsive */
         @media (max-width: 900px) {
             .dashboard-grid { grid-template-columns: 1fr; }
             .header { flex-direction: column; align-items: flex-start; }
+            .account-tabs { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
         }
         @media (max-width: 600px) {
             .main { padding: 12px; }
             .summary-row { grid-template-columns: 1fr 1fr; }
             .budget-grid { grid-template-columns: 1fr; }
+            .header-actions { width: 100%; flex-wrap: wrap; }
+            .account-tab { padding: 8px 14px; font-size: 0.8rem; }
+            .summary-card .value { font-size: 1.3rem; }
+            .chart-container { height: 250px; }
+            .transactions-table .col-account { display: none; }
+            .transactions-table td:last-child { display: none; }
+            .transactions-table th:last-child { display: none; }
+            .filter-bar input { min-width: 120px; }
+            .drilldown-panel { padding: 16px; }
+            .drilldown-stats { grid-template-columns: 1fr 1fr; }
+            .pin-key { padding: 16px; min-height: 48px; }
+        }
+        @media (max-width: 400px) {
+            .summary-row { grid-template-columns: 1fr; }
         }
 
         /* Chart sizing */
@@ -744,6 +779,10 @@
         <button class="account-tab" data-account="joint" onclick="switchAccount('joint')">Joint</button>
     </div>
     <div class="header-actions">
+        <div class="sync-status none" id="syncStatus">
+            <span class="sync-dot none" id="syncDot"></span>
+            <span id="syncText">Not connected</span>
+        </div>
         <div class="month-selector">
             <select id="monthFilter" onchange="renderDashboard()">
                 <option value="all">All Months</option>
@@ -871,6 +910,22 @@
     <div class="modal">
         <button class="modal-close" onclick="closeSettings()">&times;</button>
         <h2>Settings</h2>
+        <h3 style="font-size:1rem;margin-bottom:12px">Google Sheets Sync</h3>
+        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:8px">
+            Paste your Google Apps Script web app URL to sync data across devices.
+        </p>
+        <div class="form-group">
+            <label>API URL</label>
+            <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/.../exec">
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+            <button class="btn btn-outline btn-small" onclick="testConnection()">Test Connection</button>
+            <button class="btn btn-outline btn-small" onclick="syncNow()">Sync Now</button>
+            <button class="btn btn-outline btn-small" onclick="uploadAllToSheet()">Upload All to Sheet</button>
+        </div>
+        <div id="syncTestResult" style="font-size:0.8rem;min-height:20px;margin-bottom:8px"></div>
+        <hr style="border-color:var(--border);margin:16px 0">
+        <h3 style="font-size:1rem;margin-bottom:12px">Account Names</h3>
         <div class="form-group">
             <label>Person 1 Name</label>
             <input type="text" id="name1" placeholder="Person 1">
@@ -1184,6 +1239,8 @@ function unlockApp() {
     document.getElementById('pinScreen').style.display = 'none';
     document.getElementById('appWrapper').style.display = 'block';
     renderDashboard();
+    // Sync from Google Sheets in background
+    syncFromSheet();
 }
 
 // Override saveStore to encrypt
@@ -1253,6 +1310,193 @@ async function changePinSubmit() {
     await saveStoreEncrypted();
     closePinChange();
     showToast('PIN changed successfully', 'success');
+}
+
+// ===================== GOOGLE SHEETS API =====================
+const API_URL_KEY = 'financeDashboard_apiUrl';
+
+function getApiUrl() {
+    return localStorage.getItem(API_URL_KEY) || '';
+}
+
+function setApiUrl(url) {
+    localStorage.setItem(API_URL_KEY, url);
+}
+
+function setSyncStatus(status, text) {
+    const dot = document.getElementById('syncDot');
+    const txt = document.getElementById('syncText');
+    const wrap = document.getElementById('syncStatus');
+    if (!dot) return;
+    dot.className = 'sync-dot ' + status;
+    wrap.className = 'sync-status ' + status;
+    txt.textContent = text;
+}
+
+async function apiCall(action, params = {}) {
+    const url = getApiUrl();
+    if (!url) return null;
+
+    try {
+        setSyncStatus('syncing', 'Syncing...');
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ action, ...params })
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            setSyncStatus('synced', 'Synced');
+            return data.data;
+        } else {
+            setSyncStatus('offline', 'Error');
+            console.error('API error:', data.error);
+            return null;
+        }
+    } catch (err) {
+        setSyncStatus('offline', 'Offline');
+        console.error('API call failed:', err);
+        return null;
+    }
+}
+
+// Hash for deduplication
+function txHash(tx) {
+    const str = tx.date + '|' + tx.description + '|' + tx.amount + '|' + tx.account;
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const ch = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + ch;
+        hash |= 0;
+    }
+    return 'h' + Math.abs(hash).toString(16);
+}
+
+async function syncFromSheet() {
+    const url = getApiUrl();
+    if (!url) {
+        setSyncStatus('none', 'Not connected');
+        return;
+    }
+
+    const data = await apiCall('sync');
+    if (!data) return;
+
+    // Merge transactions from sheet
+    if (data.transactions && data.transactions.length > 0) {
+        const existingIds = new Set(store.transactions.map(t => t.id));
+        const sheetTxs = data.transactions.map(t => ({
+            id: t.id,
+            date: t.date,
+            type: t.type,
+            description: t.description,
+            amount: parseFloat(t.amount) || 0,
+            balance: t.balance ? parseFloat(t.balance) : null,
+            category: t.category || 'Other',
+            account: t.account || '',
+            hash: t.hash || ''
+        }));
+        // Replace local with sheet data (sheet is source of truth)
+        store.transactions = sheetTxs;
+    }
+
+    // Merge budgets
+    if (data.budgets) {
+        const budgets = {};
+        data.budgets.forEach(b => {
+            if (b.category && b.amount) budgets[b.category] = parseFloat(b.amount);
+        });
+        store.budgets = budgets;
+    }
+
+    // Merge settings
+    if (data.settings) {
+        store.settings.name1 = data.settings.name1 || store.settings.name1;
+        store.settings.name2 = data.settings.name2 || store.settings.name2;
+        store.settings.nameJoint = data.settings.nameJoint || store.settings.nameJoint;
+        if (data.settings.customRules) {
+            store.settings.customRules = typeof data.settings.customRules === 'string'
+                ? JSON.parse(data.settings.customRules) : data.settings.customRules;
+        }
+    }
+
+    // Merge custom categories
+    if (data.customCategories && data.customCategories.length > 0) {
+        const cc = {};
+        data.customCategories.forEach(c => {
+            cc[c.name] = { color: c.color, keywords: c.keywords ? c.keywords.split(',').map(s=>s.trim()).filter(Boolean) : [] };
+        });
+        store.settings.customCategories = cc;
+    }
+
+    saveStoreEncrypted();
+    renderDashboard();
+}
+
+async function testConnection() {
+    const urlInput = document.getElementById('apiUrlInput');
+    const url = urlInput.value.trim();
+    const resultEl = document.getElementById('syncTestResult');
+
+    if (!url) {
+        resultEl.innerHTML = '<span style="color:var(--red)">Enter an API URL first</span>';
+        return;
+    }
+
+    resultEl.innerHTML = '<span style="color:var(--orange)">Testing...</span>';
+    setApiUrl(url);
+
+    const data = await apiCall('sync');
+    if (data) {
+        const txCount = (data.transactions || []).length;
+        resultEl.innerHTML = `<span style="color:var(--green)">Connected! ${txCount} transactions in sheet.</span>`;
+    } else {
+        resultEl.innerHTML = '<span style="color:var(--red)">Connection failed. Check the URL and redeploy.</span>';
+    }
+}
+
+async function syncNow() {
+    await syncFromSheet();
+    showToast('Synced from Google Sheets', 'success');
+}
+
+async function uploadAllToSheet() {
+    if (!getApiUrl()) { showToast('Set API URL first', 'error'); return; }
+    if (!store.transactions.length) { showToast('No data to upload', 'error'); return; }
+
+    if (!confirm(`Upload ${store.transactions.length} transactions to Google Sheets? This will add any transactions not already in the sheet.`)) return;
+
+    // Add hashes to transactions
+    const txsWithHash = store.transactions.map(t => ({
+        ...t,
+        hash: t.hash || txHash(t)
+    }));
+
+    const result = await apiCall('addTransactions', { transactions: txsWithHash });
+    if (result) {
+        showToast(`Uploaded: ${result.added} added, ${result.skipped} duplicates skipped`, 'success');
+    }
+
+    // Also save budgets and settings
+    await apiCall('saveBudgets', { budgets: store.budgets });
+    await apiCall('saveSettings', {
+        settings: {
+            name1: store.settings.name1,
+            name2: store.settings.name2,
+            nameJoint: store.settings.nameJoint,
+            customRules: store.settings.customRules
+        }
+    });
+
+    // Save custom categories
+    const cc = store.settings.customCategories || {};
+    for (const [name, info] of Object.entries(cc)) {
+        await apiCall('saveCustomCategory', {
+            name,
+            color: info.color,
+            keywords: (info.keywords || []).join(',')
+        });
+    }
 }
 
 // ===================== DATA STORE =====================
@@ -1450,25 +1694,34 @@ function processNextUpload() {
     document.getElementById('accountSelectModal').classList.add('show');
 }
 
-function assignUpload(account) {
+async function assignUpload(account) {
     if (!pendingUploadData) return;
 
     const newTxs = pendingUploadData.map(tx => ({
         ...tx,
         account: account,
-        category: tx.category || categorize(tx.description)
+        category: tx.category || categorize(tx.description),
+        hash: txHash({ ...tx, account: account })
     }));
 
-    // Deduplicate by date+description+amount
-    const existingKeys = new Set(
-        store.transactions.map(t => `${t.date}|${t.description}|${t.amount}|${t.account}`)
-    );
-    const unique = newTxs.filter(t => !existingKeys.has(`${t.date}|${t.description}|${t.amount}|${t.account}`));
+    // Deduplicate locally by hash
+    const existingHashes = new Set(store.transactions.map(t => t.hash || txHash(t)));
+    const unique = newTxs.filter(t => !existingHashes.has(t.hash));
 
     store.transactions.push(...unique);
     saveStore();
 
-    showToast(`Added ${unique.length} transactions to ${getAccountName(account)}`, 'success');
+    // Push to Google Sheets (server also deduplicates)
+    if (getApiUrl() && unique.length > 0) {
+        const result = await apiCall('addTransactions', { transactions: unique });
+        if (result) {
+            showToast(`Added ${result.added} to ${getAccountName(account)} (${result.skipped} duplicates skipped)`, 'success');
+        } else {
+            showToast(`Added ${unique.length} locally to ${getAccountName(account)} (offline)`, 'success');
+        }
+    } else {
+        showToast(`Added ${unique.length} transactions to ${getAccountName(account)}`, 'success');
+    }
 
     document.getElementById('accountSelectModal').classList.remove('show');
     pendingUploadData = null;
@@ -1619,7 +1872,7 @@ function renderCategoryChart(debits) {
             },
             plugins: {
                 legend: {
-                    position: 'right',
+                    position: window.innerWidth < 600 ? 'bottom' : 'right',
                     labels: { color: '#e2e4eb', font: { size: 11 }, padding: 8, usePointStyle: true, pointStyle: 'circle' },
                     onClick: (e, legendItem, legend) => {
                         openCategoryDrilldown(legendItem.text);
@@ -2058,19 +2311,25 @@ function updateCategory(id, newCat) {
     );
 
     tx.category = newCat;
+    const updatedIds = [id];
 
     if (matching.length > 0) {
         const applyAll = confirm(
             `Apply "${newCat}" to all ${matching.length + 1} transactions from "${merchantName}"?\n\nClick OK to update all, or Cancel to update just this one.`
         );
         if (applyAll) {
-            matching.forEach(t => t.category = newCat);
+            matching.forEach(t => { t.category = newCat; updatedIds.push(t.id); });
             showToast(`Updated ${matching.length + 1} transactions from ${merchantName} to ${newCat}`, 'success');
         }
     }
 
     saveStore();
     renderDashboard();
+
+    // Sync to sheet
+    if (getApiUrl()) {
+        apiCall('bulkUpdateCategory', { ids: updatedIds, category: newCat, merchantName });
+    }
 }
 
 // ===================== ALL ACCOUNTS OVERVIEW =====================
@@ -2156,10 +2415,13 @@ function saveBudgets() {
     closeBudgets();
     renderDashboard();
     showToast('Budgets saved', 'success');
+    if (getApiUrl()) apiCall('saveBudgets', { budgets });
 }
 
 // ===================== SETTINGS MODAL =====================
 function openSettings() {
+    document.getElementById('apiUrlInput').value = getApiUrl();
+    document.getElementById('syncTestResult').textContent = '';
     document.getElementById('name1').value = store.settings.name1;
     document.getElementById('name2').value = store.settings.name2;
     document.getElementById('nameJoint').value = store.settings.nameJoint;
@@ -2190,6 +2452,10 @@ function closeSettings() {
 }
 
 function saveSettings() {
+    // Save API URL to localStorage (separate from encrypted store)
+    const apiUrl = document.getElementById('apiUrlInput').value.trim();
+    setApiUrl(apiUrl);
+
     store.settings.name1 = document.getElementById('name1').value || 'Person 1';
     store.settings.name2 = document.getElementById('name2').value || 'Person 2';
     store.settings.nameJoint = document.getElementById('nameJoint').value || 'Joint';
@@ -2214,6 +2480,18 @@ function saveSettings() {
     closeSettings();
     renderDashboard();
     showToast('Settings saved', 'success');
+
+    // Sync settings to sheet
+    if (getApiUrl()) {
+        apiCall('saveSettings', {
+            settings: {
+                name1: store.settings.name1,
+                name2: store.settings.name2,
+                nameJoint: store.settings.nameJoint,
+                customRules: store.settings.customRules
+            }
+        });
+    }
 }
 
 // ===================== DATA MANAGEMENT =====================
@@ -2302,9 +2580,9 @@ function addCustomCategory() {
     saveStore();
     nameInput.value = '';
     renderCustomCatList();
-    // Re-render the rules editor to include the new category
     openSettings();
     showToast(`Added category: ${name}`, 'success');
+    if (getApiUrl()) apiCall('saveCustomCategory', { name, color: colorInput.value, keywords: '' });
 }
 
 function removeCustomCategory(name) {
@@ -2323,6 +2601,7 @@ function removeCustomCategory(name) {
     renderCustomCatList();
     openSettings();
     showToast(`Removed category: ${name}`, 'success');
+    if (getApiUrl()) apiCall('deleteCustomCategory', { name });
 }
 
 function renderCustomCatList() {
