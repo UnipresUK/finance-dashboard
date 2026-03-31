@@ -394,6 +394,18 @@
             cursor: pointer;
             outline: none;
         }
+        .cat-select option, select option {
+            background: #1a1d27;
+            color: #e2e4eb;
+        }
+        .filter-bar select option {
+            background: #1a1d27;
+            color: #e2e4eb;
+        }
+        .month-selector select option {
+            background: #1a1d27;
+            color: #e2e4eb;
+        }
 
         /* Responsive */
         @media (max-width: 900px) {
@@ -872,9 +884,23 @@
             <input type="text" id="nameJoint" placeholder="Joint">
         </div>
         <hr style="border-color:var(--border);margin:16px 0">
-        <h3 style="font-size:1rem;margin-bottom:12px">Custom Category Rules</h3>
+        <h3 style="font-size:1rem;margin-bottom:12px">Create Custom Category</h3>
+        <div style="display:flex;gap:8px;margin-bottom:12px;align-items:flex-end">
+            <div class="form-group" style="flex:1;margin-bottom:0">
+                <label>Category Name</label>
+                <input type="text" id="newCatName" placeholder="e.g. Childcare, Pets, Holidays...">
+            </div>
+            <div class="form-group" style="width:80px;margin-bottom:0">
+                <label>Colour</label>
+                <input type="color" id="newCatColor" value="#e84393" style="width:100%;height:36px;padding:2px;cursor:pointer">
+            </div>
+            <button class="btn btn-primary" onclick="addCustomCategory()" style="height:36px">Add</button>
+        </div>
+        <div id="customCatList" style="margin-bottom:12px"></div>
+        <hr style="border-color:var(--border);margin:16px 0">
+        <h3 style="font-size:1rem;margin-bottom:12px">Category Keywords</h3>
         <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">
-            Add keywords to assign transactions to categories. One keyword per line.
+            Add keywords to auto-assign transactions to categories. Comma separated.
         </p>
         <div id="customRulesEditor"></div>
         <hr style="border-color:var(--border);margin:16px 0">
@@ -1241,7 +1267,8 @@ function defaultStore() {
             name1: 'Person 1',
             name2: 'Person 2',
             nameJoint: 'Joint',
-            customRules: {}
+            customRules: {},
+            customCategories: {}
         }
     };
 }
@@ -1258,22 +1285,40 @@ function saveStore() {
 }
 
 // ===================== CATEGORIES =====================
-const CATEGORIES = {
-    'Groceries': { color: '#00b894', icon: '🛒', keywords: ['tesco','sainsbury','asda','aldi','lidl','morrisons','co-op','coop','waitrose','m&s food','marks & spencer','iceland','ocado','grocery','supermarket'] },
-    'Eating Out': { color: '#fd79a8', icon: '🍔', keywords: ['mcdonald','burger king','kfc','nando','pizza','greggs','costa','starbucks','cafe','coffee','restaurant','just eat','deliveroo','uber eats','domino','subway','pret','five guys','wagamama','zizzi','dining'] },
-    'Transport': { color: '#74b9ff', icon: '🚗', keywords: ['fuel','petrol','diesel','bp ','shell ','esso','texaco','parking','ncp','train','rail','bus','tfl','uber','taxi','mot ','car wash','halfords','kwik fit','national express'] },
-    'Bills & Utilities': { color: '#a29bfe', icon: '📱', keywords: ['electric','gas','water','council tax','tv licence','broadband','internet','virgin media','bt ','sky ','ee ','vodafone','o2 ','three ','giffgaff','plusnet','insurance','rent','mortgage','phone'] },
-    'Shopping': { color: '#fdcb6e', icon: '🛍️', keywords: ['amazon','ebay','argos','john lewis','next','primark','h&m','zara','asos','boohoo','currys','ikea','tkmaxx','sports direct','jd sports','nike','adidas'] },
-    'Subscriptions': { color: '#00cec9', icon: '📺', keywords: ['netflix','spotify','disney','apple.com','amazon prime','youtube','audible','gym','membership','subscription','adobe','microsoft','playstation','xbox','nintendo','now tv'] },
-    'Health & Beauty': { color: '#e17055', icon: '💊', keywords: ['boots','superdrug','pharmacy','dentist','doctor','optician','specsavers','haircut','barber','salon','spa','nhs'] },
-    'Entertainment': { color: '#fab1a0', icon: '🎬', keywords: ['cinema','odeon','cineworld','vue','theatre','concert','ticket','bowling','golf','betting','lottery','pub','bar','nightclub','wetherspoon'] },
-    'Transfers': { color: '#636e72', icon: '🔄', keywords: ['transfer','tfr','standing order','direct debit setup'] },
-    'Cash': { color: '#b2bec3', icon: '💵', keywords: ['cash','atm','withdrawal','cashpoint'] },
-    'Income': { color: '#00b894', icon: '💰', keywords: ['salary','wages','pay','hmrc','tax refund','dividend','interest','refund'] },
-    'Other': { color: '#dfe6e9', icon: '📦', keywords: [] }
+const DEFAULT_CATEGORIES = {
+    'Groceries': { color: '#00b894', keywords: ['tesco','sainsbury','asda','aldi','lidl','morrisons','co-op','coop','waitrose','m&s food','marks & spencer','iceland','ocado','grocery','supermarket'] },
+    'Eating Out': { color: '#fd79a8', keywords: ['mcdonald','burger king','kfc','nando','pizza','greggs','costa','starbucks','cafe','coffee','restaurant','just eat','deliveroo','uber eats','domino','subway','pret','five guys','wagamama','zizzi','dining'] },
+    'Transport': { color: '#74b9ff', keywords: ['fuel','petrol','diesel','bp ','shell ','esso','texaco','parking','ncp','train','rail','bus','tfl','uber','taxi','mot ','car wash','halfords','kwik fit','national express'] },
+    'Bills & Utilities': { color: '#a29bfe', keywords: ['electric','gas','water','council tax','tv licence','broadband','internet','virgin media','bt ','sky ','ee ','vodafone','o2 ','three ','giffgaff','plusnet','insurance','rent','mortgage','phone'] },
+    'Shopping': { color: '#fdcb6e', keywords: ['amazon','ebay','argos','john lewis','next','primark','h&m','zara','asos','boohoo','currys','ikea','tkmaxx','sports direct','jd sports','nike','adidas'] },
+    'Subscriptions': { color: '#00cec9', keywords: ['netflix','spotify','disney','apple.com','amazon prime','youtube','audible','gym','membership','subscription','adobe','microsoft','playstation','xbox','nintendo','now tv'] },
+    'Health & Beauty': { color: '#e17055', keywords: ['boots','superdrug','pharmacy','dentist','doctor','optician','specsavers','haircut','barber','salon','spa','nhs'] },
+    'Entertainment': { color: '#fab1a0', keywords: ['cinema','odeon','cineworld','vue','theatre','concert','ticket','bowling','golf','betting','lottery','pub','bar','nightclub','wetherspoon'] },
+    'Transfers': { color: '#636e72', keywords: ['transfer','tfr','standing order','direct debit setup'] },
+    'Cash': { color: '#b2bec3', keywords: ['cash','atm','withdrawal','cashpoint'] },
+    'Income': { color: '#00b894', keywords: ['salary','wages','pay','hmrc','tax refund','dividend','interest','refund'] },
+    'Other': { color: '#dfe6e9', keywords: [] }
 };
 
-const CAT_COLORS = Object.fromEntries(Object.entries(CATEGORIES).map(([k,v]) => [k, v.color]));
+const CUSTOM_CAT_COLORS = ['#e84393','#0984e3','#6c5ce7','#00b894','#fdcb6e','#e17055','#00cec9','#fab1a0','#74b9ff','#a29bfe','#55efc4','#ffeaa7','#dfe6e9','#b2bec3','#fd79a8','#636e72'];
+
+// Merged categories (default + user-created)
+function getAllCategories() {
+    const cats = { ...DEFAULT_CATEGORIES };
+    const custom = (store.settings && store.settings.customCategories) || {};
+    for (const [name, info] of Object.entries(custom)) {
+        cats[name] = info;
+    }
+    return cats;
+}
+
+// Keep these as getters so they always reflect current state
+function getCATEGORIES() { return getAllCategories(); }
+function getCAT_COLORS() { return Object.fromEntries(Object.entries(getAllCategories()).map(([k,v]) => [k, v.color])); }
+
+// For backward compat, define CATEGORIES and CAT_COLORS as getters on window
+Object.defineProperty(window, 'CATEGORIES', { get: getCATEGORIES });
+Object.defineProperty(window, 'CAT_COLORS', { get: getCAT_COLORS });
 
 function categorize(description) {
     const desc = description.toLowerCase();
@@ -1972,6 +2017,7 @@ function renderTransactions() {
                     ${Object.keys(CATEGORIES).map(c =>
                         `<option value="${c}"${c===t.category?' selected':''}>${c}</option>`
                     ).join('')}
+                    <option value="__new__">+ New Category...</option>
                 </select>
             </td>
             <td class="${t.amount < 0 ? 'amount-debit' : 'amount-credit'}">
@@ -1989,11 +2035,42 @@ function formatDate(d) {
 
 function updateCategory(id, newCat) {
     const tx = store.transactions.find(t => t.id === id);
-    if (tx) {
-        tx.category = newCat;
-        saveStore();
-        renderDashboard();
+    if (!tx) return;
+
+    // Handle "new category" option
+    if (newCat === '__new__') {
+        const name = prompt('Enter new category name:');
+        if (!name || !name.trim()) { renderTransactions(); return; }
+        const trimmed = name.trim();
+        if (!CATEGORIES[trimmed]) {
+            if (!store.settings.customCategories) store.settings.customCategories = {};
+            const colorIdx = Object.keys(store.settings.customCategories).length % CUSTOM_CAT_COLORS.length;
+            store.settings.customCategories[trimmed] = { color: CUSTOM_CAT_COLORS[colorIdx], keywords: [] };
+            showToast(`Created category: ${trimmed}`, 'success');
+        }
+        newCat = trimmed;
     }
+
+    const merchantName = getMerchantName(tx.description);
+    // Find all transactions with the same merchant name
+    const matching = store.transactions.filter(t =>
+        t.id !== id && getMerchantName(t.description) === merchantName && t.category !== newCat
+    );
+
+    tx.category = newCat;
+
+    if (matching.length > 0) {
+        const applyAll = confirm(
+            `Apply "${newCat}" to all ${matching.length + 1} transactions from "${merchantName}"?\n\nClick OK to update all, or Cancel to update just this one.`
+        );
+        if (applyAll) {
+            matching.forEach(t => t.category = newCat);
+            showToast(`Updated ${matching.length + 1} transactions from ${merchantName} to ${newCat}`, 'success');
+        }
+    }
+
+    saveStore();
+    renderDashboard();
 }
 
 // ===================== ALL ACCOUNTS OVERVIEW =====================
@@ -2087,13 +2164,19 @@ function openSettings() {
     document.getElementById('name2').value = store.settings.name2;
     document.getElementById('nameJoint').value = store.settings.nameJoint;
 
-    // Render custom rules editor
-    const cats = Object.keys(CATEGORIES).filter(c => c !== 'Other');
+    // Render custom categories list
+    renderCustomCatList();
+
+    // Render custom rules editor (all categories including custom)
+    const allCats = Object.keys(CATEGORIES).filter(c => c !== 'Other');
     const customRules = store.settings.customRules || {};
-    document.getElementById('customRulesEditor').innerHTML = cats.map(cat => `
+    document.getElementById('customRulesEditor').innerHTML = allCats.map(cat => `
         <div class="form-group">
-            <label>${cat} (custom keywords)</label>
-            <input type="text" id="rules_${cat.replace(/\s+/g,'_')}"
+            <label style="display:flex;align-items:center;gap:6px">
+                <span style="width:10px;height:10px;border-radius:50%;background:${CAT_COLORS[cat]};display:inline-block"></span>
+                ${cat}
+            </label>
+            <input type="text" id="rules_${cat.replace(/[^a-zA-Z0-9]/g,'_')}"
                 value="${(customRules[cat] || []).join(', ')}"
                 placeholder="keyword1, keyword2, ...">
         </div>
@@ -2112,10 +2195,10 @@ function saveSettings() {
     store.settings.nameJoint = document.getElementById('nameJoint').value || 'Joint';
 
     // Save custom rules
-    const cats = Object.keys(CATEGORIES).filter(c => c !== 'Other');
+    const allCats = Object.keys(CATEGORIES).filter(c => c !== 'Other');
     const customRules = {};
-    cats.forEach(cat => {
-        const input = document.getElementById('rules_' + cat.replace(/\s+/g,'_'));
+    allCats.forEach(cat => {
+        const input = document.getElementById('rules_' + cat.replace(/[^a-zA-Z0-9]/g,'_'));
         if (input && input.value.trim()) {
             customRules[cat] = input.value.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
         }
@@ -2205,6 +2288,60 @@ document.addEventListener('drop', e => {
         processFiles(Array.from(e.dataTransfer.files));
     }
 });
+
+// ===================== CUSTOM CATEGORIES =====================
+function addCustomCategory() {
+    const nameInput = document.getElementById('newCatName');
+    const colorInput = document.getElementById('newCatColor');
+    const name = nameInput.value.trim();
+    if (!name) { showToast('Enter a category name', 'error'); return; }
+    if (CATEGORIES[name]) { showToast('Category already exists', 'error'); return; }
+
+    if (!store.settings.customCategories) store.settings.customCategories = {};
+    store.settings.customCategories[name] = { color: colorInput.value, keywords: [] };
+    saveStore();
+    nameInput.value = '';
+    renderCustomCatList();
+    // Re-render the rules editor to include the new category
+    openSettings();
+    showToast(`Added category: ${name}`, 'success');
+}
+
+function removeCustomCategory(name) {
+    if (!confirm(`Delete category "${name}"? Transactions will be re-categorised.`)) return;
+    if (store.settings.customCategories) {
+        delete store.settings.customCategories[name];
+    }
+    if (store.settings.customRules) {
+        delete store.settings.customRules[name];
+    }
+    // Re-categorize transactions that were in this category
+    store.transactions.forEach(t => {
+        if (t.category === name) t.category = categorize(t.description);
+    });
+    saveStore();
+    renderCustomCatList();
+    openSettings();
+    showToast(`Removed category: ${name}`, 'success');
+}
+
+function renderCustomCatList() {
+    const custom = (store.settings && store.settings.customCategories) || {};
+    const el = document.getElementById('customCatList');
+    if (!el) return;
+    const entries = Object.entries(custom);
+    if (entries.length === 0) {
+        el.innerHTML = '<p style="font-size:0.8rem;color:var(--text-dim)">No custom categories yet.</p>';
+        return;
+    }
+    el.innerHTML = entries.map(([name, info]) => `
+        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+            <span style="width:12px;height:12px;border-radius:50%;background:${info.color};display:inline-block"></span>
+            <span style="flex:1;font-size:0.9rem">${name}</span>
+            <button class="btn btn-outline btn-small" onclick="removeCustomCategory('${name.replace(/'/g, "\\'")}')" style="color:var(--red);border-color:var(--red)">Remove</button>
+        </div>
+    `).join('');
+}
 
 // ===================== INIT =====================
 initPinScreen();
