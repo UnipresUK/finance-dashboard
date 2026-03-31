@@ -479,10 +479,110 @@
             margin-bottom: 12px;
             color: var(--accent-light);
         }
+        /* PIN Lock Screen */
+        .pin-screen {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .pin-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 40px;
+            text-align: center;
+            width: 90%;
+            max-width: 380px;
+        }
+        .pin-box h2 { margin-bottom: 8px; font-size: 1.3rem; }
+        .pin-box p { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 24px; }
+        .pin-dots {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .pin-dot {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid var(--border);
+            transition: all 0.2s;
+        }
+        .pin-dot.filled { background: var(--accent); border-color: var(--accent); }
+        .pin-dot.error { border-color: var(--red); background: var(--red); }
+        .pin-keypad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            max-width: 240px;
+            margin: 0 auto;
+        }
+        .pin-key {
+            padding: 14px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--surface2);
+            color: var(--text);
+            font-size: 1.3rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            user-select: none;
+        }
+        .pin-key:hover { background: var(--accent); border-color: var(--accent); }
+        .pin-key:active { transform: scale(0.95); }
+        .pin-key.fn { font-size: 0.85rem; font-weight: 500; }
+        .pin-error {
+            color: var(--red);
+            font-size: 0.85rem;
+            margin-top: 12px;
+            min-height: 20px;
+        }
+        .pin-lockout {
+            color: var(--orange);
+            font-size: 0.85rem;
+            margin-top: 8px;
+        }
     </style>
 </head>
 <body>
 
+<!-- PIN Lock Screen -->
+<div id="pinScreen" class="pin-screen" style="display:none">
+    <div class="pin-box">
+        <h2 id="pinTitle">Enter PIN</h2>
+        <p id="pinSubtitle">Enter your 4-digit PIN to access the dashboard</p>
+        <div class="pin-dots" id="pinDots">
+            <div class="pin-dot"></div>
+            <div class="pin-dot"></div>
+            <div class="pin-dot"></div>
+            <div class="pin-dot"></div>
+        </div>
+        <div class="pin-keypad">
+            <button class="pin-key" onclick="pinPress('1')">1</button>
+            <button class="pin-key" onclick="pinPress('2')">2</button>
+            <button class="pin-key" onclick="pinPress('3')">3</button>
+            <button class="pin-key" onclick="pinPress('4')">4</button>
+            <button class="pin-key" onclick="pinPress('5')">5</button>
+            <button class="pin-key" onclick="pinPress('6')">6</button>
+            <button class="pin-key" onclick="pinPress('7')">7</button>
+            <button class="pin-key" onclick="pinPress('8')">8</button>
+            <button class="pin-key" onclick="pinPress('9')">9</button>
+            <button class="pin-key fn" onclick="pinClear()">Clear</button>
+            <button class="pin-key" onclick="pinPress('0')">0</button>
+            <button class="pin-key fn" onclick="pinBackspace()">Del</button>
+        </div>
+        <div class="pin-error" id="pinError"></div>
+        <div class="pin-lockout" id="pinLockout"></div>
+    </div>
+</div>
+
+<!-- App wrapper (hidden until PIN verified) -->
+<div id="appWrapper" style="display:none">
 <div class="header">
     <h1><span>£</span> Finance Dashboard</h1>
     <div class="account-tabs">
@@ -638,6 +738,11 @@
         </p>
         <div id="customRulesEditor"></div>
         <hr style="border-color:var(--border);margin:16px 0">
+        <h3 style="font-size:1rem;margin-bottom:12px">Security</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+            <button class="btn btn-outline" onclick="openPinChange()">Change PIN</button>
+        </div>
+        <hr style="border-color:var(--border);margin:16px 0">
         <h3 style="font-size:1rem;margin-bottom:12px">Data Management</h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-outline" onclick="exportData()">Export All Data</button>
@@ -650,6 +755,31 @@
         <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
             <button class="btn btn-outline" onclick="closeSettings()">Cancel</button>
             <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+        </div>
+    </div>
+</div>
+
+<!-- PIN Change Modal -->
+<div class="modal-overlay" id="pinChangeModal">
+    <div class="modal">
+        <button class="modal-close" onclick="closePinChange()">&times;</button>
+        <h2>Change PIN</h2>
+        <div class="form-group">
+            <label>Current PIN</label>
+            <input type="password" id="currentPin" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="****">
+        </div>
+        <div class="form-group">
+            <label>New PIN (4 digits)</label>
+            <input type="password" id="newPin" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="****">
+        </div>
+        <div class="form-group">
+            <label>Confirm New PIN</label>
+            <input type="password" id="confirmPin" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="****">
+        </div>
+        <div class="pin-error" id="pinChangeError"></div>
+        <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-outline" onclick="closePinChange()">Cancel</button>
+            <button class="btn btn-primary" onclick="changePinSubmit()">Change PIN</button>
         </div>
     </div>
 </div>
@@ -667,7 +797,298 @@
     </div>
 </div>
 
+</div><!-- end appWrapper -->
+
 <script>
+// ===================== PIN / ENCRYPTION =====================
+const PIN_HASH_KEY = 'financeDashboard_pinHash';
+const PIN_SALT_KEY = 'financeDashboard_pinSalt';
+const ENC_DATA_KEY = 'financeDashboard_encrypted';
+const ATTEMPTS_KEY = 'financeDashboard_attempts';
+const LOCKOUT_KEY = 'financeDashboard_lockout';
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MINS = 5;
+
+let currentPinKey = null; // derived CryptoKey for AES
+let pinEntry = '';
+let pinMode = 'unlock'; // 'setup', 'confirm', 'unlock'
+let pinSetupValue = '';
+let failedAttempts = parseInt(localStorage.getItem(ATTEMPTS_KEY) || '0');
+
+// SHA-256 hash for PIN verification
+async function hashPin(pin, salt) {
+    const enc = new TextEncoder();
+    const data = enc.encode(pin + salt);
+    const hash = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// Derive AES-GCM key from PIN
+async function deriveKey(pin, salt) {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(pin + salt), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: enc.encode(salt), iterations: 100000, hash: 'SHA-256' },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt']
+    );
+}
+
+// Encrypt string with AES-GCM
+async function encryptData(plaintext, key) {
+    const enc = new TextEncoder();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
+    // Store as iv:ciphertext (both base64)
+    const ivB64 = btoa(String.fromCharCode(...iv));
+    const ctB64 = btoa(String.fromCharCode(...new Uint8Array(ciphertext)));
+    return ivB64 + ':' + ctB64;
+}
+
+// Decrypt string with AES-GCM
+async function decryptData(stored, key) {
+    const [ivB64, ctB64] = stored.split(':');
+    const iv = new Uint8Array(atob(ivB64).split('').map(c => c.charCodeAt(0)));
+    const ct = new Uint8Array(atob(ctB64).split('').map(c => c.charCodeAt(0)));
+    const plainBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    return new TextDecoder().decode(plainBuf);
+}
+
+function generateSalt() {
+    return Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+// Check lockout
+function checkLockout() {
+    const lockoutUntil = parseInt(localStorage.getItem(LOCKOUT_KEY) || '0');
+    if (lockoutUntil > Date.now()) {
+        const secsLeft = Math.ceil((lockoutUntil - Date.now()) / 1000);
+        document.getElementById('pinLockout').textContent = `Locked out. Try again in ${secsLeft}s`;
+        document.getElementById('pinError').textContent = '';
+        return true;
+    }
+    document.getElementById('pinLockout').textContent = '';
+    return false;
+}
+
+function updatePinDots() {
+    const dots = document.querySelectorAll('#pinDots .pin-dot');
+    dots.forEach((d, i) => {
+        d.classList.toggle('filled', i < pinEntry.length);
+        d.classList.remove('error');
+    });
+}
+
+function showPinError(msg) {
+    document.getElementById('pinError').textContent = msg;
+    const dots = document.querySelectorAll('#pinDots .pin-dot');
+    dots.forEach(d => d.classList.add('error'));
+    setTimeout(() => dots.forEach(d => d.classList.remove('error')), 600);
+}
+
+function pinPress(digit) {
+    if (checkLockout()) return;
+    if (pinEntry.length >= 4) return;
+    pinEntry += digit;
+    updatePinDots();
+    if (pinEntry.length === 4) {
+        setTimeout(() => handlePinComplete(), 150);
+    }
+}
+
+function pinClear() {
+    pinEntry = '';
+    updatePinDots();
+    document.getElementById('pinError').textContent = '';
+}
+
+function pinBackspace() {
+    pinEntry = pinEntry.slice(0, -1);
+    updatePinDots();
+}
+
+// Keyboard support for PIN
+document.addEventListener('keydown', (e) => {
+    if (document.getElementById('pinScreen').style.display === 'none') return;
+    // Don't capture if a modal input is focused
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+    if (e.key >= '0' && e.key <= '9') pinPress(e.key);
+    else if (e.key === 'Backspace') pinBackspace();
+    else if (e.key === 'Escape') pinClear();
+});
+
+async function handlePinComplete() {
+    if (pinMode === 'setup') {
+        pinSetupValue = pinEntry;
+        pinEntry = '';
+        pinMode = 'confirm';
+        document.getElementById('pinTitle').textContent = 'Confirm PIN';
+        document.getElementById('pinSubtitle').textContent = 'Enter the same 4-digit PIN again to confirm';
+        updatePinDots();
+        return;
+    }
+
+    if (pinMode === 'confirm') {
+        if (pinEntry !== pinSetupValue) {
+            showPinError('PINs do not match. Try again.');
+            pinEntry = '';
+            pinMode = 'setup';
+            pinSetupValue = '';
+            document.getElementById('pinTitle').textContent = 'Create PIN';
+            document.getElementById('pinSubtitle').textContent = 'Choose a 4-digit PIN to secure your data';
+            updatePinDots();
+            return;
+        }
+        // Set up PIN
+        const salt = generateSalt();
+        const hash = await hashPin(pinEntry, salt);
+        localStorage.setItem(PIN_SALT_KEY, salt);
+        localStorage.setItem(PIN_HASH_KEY, hash);
+        currentPinKey = await deriveKey(pinEntry, salt);
+
+        // Encrypt any existing unencrypted data and migrate
+        const oldData = localStorage.getItem('financeDashboard');
+        if (oldData) {
+            const encrypted = await encryptData(oldData, currentPinKey);
+            localStorage.setItem(ENC_DATA_KEY, encrypted);
+            localStorage.removeItem('financeDashboard');
+        } else {
+            // Save empty store encrypted
+            const encrypted = await encryptData(JSON.stringify(defaultStore()), currentPinKey);
+            localStorage.setItem(ENC_DATA_KEY, encrypted);
+        }
+
+        pinEntry = '';
+        unlockApp();
+        return;
+    }
+
+    // Mode: unlock
+    const salt = localStorage.getItem(PIN_SALT_KEY);
+    const storedHash = localStorage.getItem(PIN_HASH_KEY);
+    const hash = await hashPin(pinEntry, salt);
+
+    if (hash === storedHash) {
+        // Success
+        failedAttempts = 0;
+        localStorage.setItem(ATTEMPTS_KEY, '0');
+        currentPinKey = await deriveKey(pinEntry, salt);
+        pinEntry = '';
+
+        // Decrypt data
+        try {
+            const encData = localStorage.getItem(ENC_DATA_KEY);
+            if (encData) {
+                const json = await decryptData(encData, currentPinKey);
+                store = JSON.parse(json);
+            } else {
+                store = defaultStore();
+            }
+        } catch(e) {
+            store = defaultStore();
+        }
+
+        unlockApp();
+    } else {
+        // Failed
+        failedAttempts++;
+        localStorage.setItem(ATTEMPTS_KEY, String(failedAttempts));
+        pinEntry = '';
+        updatePinDots();
+
+        if (failedAttempts >= MAX_ATTEMPTS) {
+            const lockoutUntil = Date.now() + LOCKOUT_MINS * 60 * 1000;
+            localStorage.setItem(LOCKOUT_KEY, String(lockoutUntil));
+            failedAttempts = 0;
+            localStorage.setItem(ATTEMPTS_KEY, '0');
+            checkLockout();
+            // Start countdown
+            const interval = setInterval(() => {
+                if (!checkLockout()) clearInterval(interval);
+            }, 1000);
+        } else {
+            showPinError(`Wrong PIN. ${MAX_ATTEMPTS - failedAttempts} attempts remaining.`);
+        }
+    }
+}
+
+function unlockApp() {
+    document.getElementById('pinScreen').style.display = 'none';
+    document.getElementById('appWrapper').style.display = 'block';
+    renderDashboard();
+}
+
+// Override saveStore to encrypt
+async function saveStoreEncrypted() {
+    if (currentPinKey) {
+        const encrypted = await encryptData(JSON.stringify(store), currentPinKey);
+        localStorage.setItem(ENC_DATA_KEY, encrypted);
+    }
+}
+
+// PIN init - decide what screen to show
+function initPinScreen() {
+    const hasPin = localStorage.getItem(PIN_HASH_KEY);
+    if (!hasPin) {
+        // First time - check if there's unencrypted data (migration) or fresh start
+        pinMode = 'setup';
+        document.getElementById('pinTitle').textContent = 'Create PIN';
+        document.getElementById('pinSubtitle').textContent = 'Choose a 4-digit PIN to secure your data';
+    } else {
+        pinMode = 'unlock';
+        document.getElementById('pinTitle').textContent = 'Enter PIN';
+        document.getElementById('pinSubtitle').textContent = 'Enter your 4-digit PIN to access the dashboard';
+    }
+    document.getElementById('pinScreen').style.display = 'flex';
+    document.getElementById('appWrapper').style.display = 'none';
+    checkLockout();
+}
+
+// Change PIN from settings
+function openPinChange() {
+    document.getElementById('pinChangeModal').classList.add('show');
+    document.getElementById('currentPin').value = '';
+    document.getElementById('newPin').value = '';
+    document.getElementById('confirmPin').value = '';
+    document.getElementById('pinChangeError').textContent = '';
+}
+function closePinChange() {
+    document.getElementById('pinChangeModal').classList.remove('show');
+}
+async function changePinSubmit() {
+    const current = document.getElementById('currentPin').value;
+    const newP = document.getElementById('newPin').value;
+    const conf = document.getElementById('confirmPin').value;
+    const errEl = document.getElementById('pinChangeError');
+
+    if (!/^\d{4}$/.test(current) || !/^\d{4}$/.test(newP)) {
+        errEl.textContent = 'PIN must be exactly 4 digits';
+        return;
+    }
+    if (newP !== conf) {
+        errEl.textContent = 'New PINs do not match';
+        return;
+    }
+    // Verify current PIN
+    const salt = localStorage.getItem(PIN_SALT_KEY);
+    const hash = await hashPin(current, salt);
+    if (hash !== localStorage.getItem(PIN_HASH_KEY)) {
+        errEl.textContent = 'Current PIN is incorrect';
+        return;
+    }
+    // Set new PIN
+    const newSalt = generateSalt();
+    const newHash = await hashPin(newP, newSalt);
+    localStorage.setItem(PIN_SALT_KEY, newSalt);
+    localStorage.setItem(PIN_HASH_KEY, newHash);
+    currentPinKey = await deriveKey(newP, newSalt);
+    await saveStoreEncrypted();
+    closePinChange();
+    showToast('PIN changed successfully', 'success');
+}
+
 // ===================== DATA STORE =====================
 const STORAGE_KEY = 'financeDashboard';
 let store = loadStore();
@@ -686,15 +1107,14 @@ function defaultStore() {
 }
 
 function loadStore() {
-    try {
-        const d = JSON.parse(localStorage.getItem(STORAGE_KEY));
-        if (d && d.transactions) return d;
-    } catch(e) {}
+    // Data is loaded after PIN unlock via decryption
+    // This is a fallback for in-memory use
     return defaultStore();
 }
 
 function saveStore() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+    // Save encrypted
+    saveStoreEncrypted();
 }
 
 // ===================== CATEGORIES =====================
@@ -1437,12 +1857,18 @@ function importData(event) {
 }
 
 function clearAllData() {
-    if (confirm('Are you sure? This will delete ALL transactions and settings.')) {
+    if (confirm('Are you sure? This will delete ALL transactions, settings, and your PIN. You will need to set up a new PIN.')) {
         store = defaultStore();
-        saveStore();
-        renderDashboard();
+        localStorage.removeItem(ENC_DATA_KEY);
+        localStorage.removeItem(PIN_HASH_KEY);
+        localStorage.removeItem(PIN_SALT_KEY);
+        localStorage.removeItem(ATTEMPTS_KEY);
+        localStorage.removeItem(LOCKOUT_KEY);
+        localStorage.removeItem('financeDashboard');
+        currentPinKey = null;
         closeSettings();
         showToast('All data cleared', 'success');
+        initPinScreen();
     }
 }
 
@@ -1468,7 +1894,7 @@ document.addEventListener('drop', e => {
 });
 
 // ===================== INIT =====================
-renderDashboard();
+initPinScreen();
 </script>
 </body>
 </html>
