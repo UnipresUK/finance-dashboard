@@ -480,6 +480,131 @@
             color: var(--accent-light);
         }
         /* PIN Lock Screen */
+        /* Category Drilldown */
+        .drilldown-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 100;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 40px 20px;
+            overflow-y: auto;
+        }
+        .drilldown-overlay.show { display: flex; }
+        .drilldown-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+        .drilldown-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .drilldown-header h2 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.2rem;
+        }
+        .drilldown-header .cat-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .drilldown-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .drilldown-stat {
+            background: var(--surface2);
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .drilldown-stat .label { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 4px; }
+        .drilldown-stat .value { font-size: 1.1rem; font-weight: 700; }
+        .merchant-breakdown { margin-bottom: 20px; }
+        .merchant-breakdown h3 { font-size: 0.9rem; color: var(--text-dim); margin-bottom: 12px; }
+        .merchant-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .merchant-row:hover { background: var(--surface2); margin: 0 -8px; padding: 10px 8px; border-radius: 6px; }
+        .merchant-row:last-child { border-bottom: none; }
+        .merchant-bar-container { flex: 1; min-width: 0; }
+        .merchant-name {
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .merchant-bar-bg {
+            height: 6px;
+            background: var(--surface2);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .merchant-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.4s ease;
+        }
+        .merchant-info {
+            text-align: right;
+            min-width: 100px;
+        }
+        .merchant-info .amt { font-size: 0.9rem; font-weight: 600; }
+        .merchant-info .cnt { font-size: 0.75rem; color: var(--text-dim); }
+        .merchant-info .avg { font-size: 0.7rem; color: var(--text-dim); }
+        .drilldown-tx-list { margin-top: 16px; }
+        .drilldown-tx-list h3 { font-size: 0.9rem; color: var(--text-dim); margin-bottom: 8px; }
+        .drilldown-tx-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.83rem;
+        }
+        .drilldown-tx-item:last-child { border-bottom: none; }
+        .drilldown-tx-desc {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin: 0 12px;
+            color: var(--text-dim);
+        }
+        .drilldown-back {
+            font-size: 0.8rem;
+            color: var(--accent-light);
+            cursor: pointer;
+            border: none;
+            background: none;
+            padding: 4px 8px;
+        }
+        .drilldown-back:hover { text-decoration: underline; }
+        .clickable-cat { cursor: pointer; transition: opacity 0.15s; }
+        .clickable-cat:hover { opacity: 0.8; }
+
         .pin-screen {
             display: flex;
             justify-content: center;
@@ -550,6 +675,21 @@
     </style>
 </head>
 <body>
+
+<!-- Category Drilldown -->
+<div class="drilldown-overlay" id="drilldownOverlay" onclick="if(event.target===this)closeDrilldown()">
+    <div class="drilldown-panel">
+        <div class="drilldown-header">
+            <div>
+                <button class="drilldown-back" id="drilldownBack" style="display:none" onclick="drilldownGoBack()">Back to category</button>
+                <h2 id="drilldownTitle"><span class="cat-dot" id="drilldownDot"></span> <span id="drilldownName"></span></h2>
+            </div>
+            <button class="modal-close" onclick="closeDrilldown()">&times;</button>
+        </div>
+        <div class="drilldown-stats" id="drilldownStats"></div>
+        <div id="drilldownBody"></div>
+    </div>
+</div>
 
 <!-- PIN Lock Screen -->
 <div id="pinScreen" class="pin-screen" style="display:none">
@@ -1426,19 +1566,192 @@ function renderCategoryChart(debits) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (event, elements) => {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    openCategoryDrilldown(labels[idx]);
+                }
+            },
             plugins: {
                 legend: {
                     position: 'right',
-                    labels: { color: '#e2e4eb', font: { size: 11 }, padding: 8, usePointStyle: true, pointStyle: 'circle' }
+                    labels: { color: '#e2e4eb', font: { size: 11 }, padding: 8, usePointStyle: true, pointStyle: 'circle' },
+                    onClick: (e, legendItem, legend) => {
+                        openCategoryDrilldown(legendItem.text);
+                    }
                 },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => ` ${ctx.label}: £${ctx.parsed.toFixed(2)} (${((ctx.parsed/data.reduce((a,b)=>a+b,0))*100).toFixed(1)}%)`
+                        label: (ctx) => ` ${ctx.label}: £${ctx.parsed.toFixed(2)} (${((ctx.parsed/data.reduce((a,b)=>a+b,0))*100).toFixed(1)}%) — Click to drill down`
                     }
                 }
             }
         }
     });
+    // Make canvas show pointer on hoverable segments
+    document.getElementById('categoryChart').style.cursor = 'pointer';
+}
+
+// ===================== CATEGORY DRILLDOWN =====================
+let drilldownCategory = null;
+let drilldownMerchant = null;
+
+function getMerchantName(desc) {
+    // Extract a clean merchant name from Lloyds description
+    let name = desc
+        .replace(/^(CD|BGC|DDR|FPO|FPI|BP|STO|DEB|CPT|DD|SO|TFR|CR|DR)\s+/i, '')
+        .replace(/\b\d{2}\/\d{2}\/?\d{0,4}\b/g, '')  // dates
+        .replace(/\b\d{4,}\b/g, '')                      // long numbers (card refs)
+        .replace(/\bREF\s*\S+/gi, '')                    // references
+        .replace(/\b[A-Z]{2}\d{2}\s?\d{4}\s?\d{4}\s?\d{4}/g, '') // IBANs
+        .replace(/,.*$/, '')                              // everything after comma
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    // Capitalize nicely
+    if (name.length > 30) name = name.substring(0, 30);
+    return name || desc.substring(0, 25);
+}
+
+function openCategoryDrilldown(category) {
+    drilldownCategory = category;
+    drilldownMerchant = null;
+
+    const txs = getFilteredTransactions().filter(t => t.category === category && t.amount < 0);
+    const totalSpent = txs.reduce((s, t) => s + Math.abs(t.amount), 0);
+    const budgets = store.budgets || {};
+    const budget = budgets[category] || 0;
+
+    // Set header
+    document.getElementById('drilldownDot').style.background = CAT_COLORS[category] || '#636e72';
+    document.getElementById('drilldownName').textContent = category;
+    document.getElementById('drilldownBack').style.display = 'none';
+
+    // Stats
+    const avgPerTx = txs.length > 0 ? totalSpent / txs.length : 0;
+    const days = getDaysInRange(txs);
+    const perDay = days > 0 ? totalSpent / days : 0;
+    document.getElementById('drilldownStats').innerHTML = `
+        <div class="drilldown-stat">
+            <div class="label">Total Spent</div>
+            <div class="value expense">£${totalSpent.toFixed(2)}</div>
+        </div>
+        <div class="drilldown-stat">
+            <div class="label">Transactions</div>
+            <div class="value">${txs.length}</div>
+        </div>
+        <div class="drilldown-stat">
+            <div class="label">Avg per Transaction</div>
+            <div class="value">£${avgPerTx.toFixed(2)}</div>
+        </div>
+        <div class="drilldown-stat">
+            <div class="label">Per Day</div>
+            <div class="value">£${perDay.toFixed(2)}</div>
+        </div>
+        ${budget > 0 ? `
+        <div class="drilldown-stat">
+            <div class="label">Budget</div>
+            <div class="value ${totalSpent > budget ? 'expense' : 'income'}">£${budget.toFixed(0)} ${totalSpent > budget ? '(+£' + (totalSpent - budget).toFixed(0) + ' over)' : '(£' + (budget - totalSpent).toFixed(0) + ' left)'}</div>
+        </div>` : ''}
+    `;
+
+    // Group by merchant
+    const merchants = {};
+    txs.forEach(t => {
+        const name = getMerchantName(t.description);
+        if (!merchants[name]) merchants[name] = { total: 0, count: 0, transactions: [] };
+        merchants[name].total += Math.abs(t.amount);
+        merchants[name].count++;
+        merchants[name].transactions.push(t);
+    });
+
+    const sorted = Object.entries(merchants).sort((a, b) => b[1].total - a[1].total);
+    const maxTotal = sorted.length > 0 ? sorted[0][1].total : 1;
+
+    let html = '<div class="merchant-breakdown"><h3>Breakdown by Merchant / Payee</h3>';
+    html += sorted.map(([name, data]) => {
+        const pct = (data.total / maxTotal) * 100;
+        const pctOfCat = ((data.total / totalSpent) * 100).toFixed(1);
+        const avg = data.total / data.count;
+        return `
+            <div class="merchant-row" onclick="drilldownToMerchant('${escapeHtml(name)}', '${escapeHtml(category)}')">
+                <div class="merchant-bar-container">
+                    <div class="merchant-name">${name}</div>
+                    <div class="merchant-bar-bg">
+                        <div class="merchant-bar-fill" style="width:${pct}%;background:${CAT_COLORS[category] || '#636e72'}"></div>
+                    </div>
+                </div>
+                <div class="merchant-info">
+                    <div class="amt">£${data.total.toFixed(2)} <span style="font-size:0.7rem;color:var(--text-dim)">(${pctOfCat}%)</span></div>
+                    <div class="cnt">${data.count} transaction${data.count > 1 ? 's' : ''}</div>
+                    <div class="avg">avg £${avg.toFixed(2)}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    html += '</div>';
+
+    document.getElementById('drilldownBody').innerHTML = html;
+    document.getElementById('drilldownOverlay').classList.add('show');
+}
+
+function drilldownToMerchant(merchantName, category) {
+    drilldownMerchant = merchantName;
+
+    const txs = getFilteredTransactions()
+        .filter(t => t.category === category && t.amount < 0 && getMerchantName(t.description) === merchantName);
+
+    const totalSpent = txs.reduce((s, t) => s + Math.abs(t.amount), 0);
+
+    document.getElementById('drilldownName').textContent = merchantName;
+    document.getElementById('drilldownBack').style.display = 'inline';
+    document.getElementById('drilldownBack').textContent = `Back to ${category}`;
+
+    // Stats
+    const avgPerTx = txs.length > 0 ? totalSpent / txs.length : 0;
+    document.getElementById('drilldownStats').innerHTML = `
+        <div class="drilldown-stat">
+            <div class="label">Total at ${merchantName}</div>
+            <div class="value expense">£${totalSpent.toFixed(2)}</div>
+        </div>
+        <div class="drilldown-stat">
+            <div class="label">Visits</div>
+            <div class="value">${txs.length}</div>
+        </div>
+        <div class="drilldown-stat">
+            <div class="label">Average Spend</div>
+            <div class="value">£${avgPerTx.toFixed(2)}</div>
+        </div>
+    `;
+
+    // Show all transactions
+    const sorted = [...txs].sort((a, b) => b.date.localeCompare(a.date));
+    let html = '<div class="drilldown-tx-list"><h3>All Transactions</h3>';
+    html += sorted.map(t => `
+        <div class="drilldown-tx-item">
+            <span style="min-width:80px">${formatDate(t.date)}</span>
+            <span class="drilldown-tx-desc" title="${escapeHtml(t.description)}">${t.description}</span>
+            <span class="amount-debit" style="font-weight:600">-£${Math.abs(t.amount).toFixed(2)}</span>
+        </div>
+    `).join('');
+    html += '</div>';
+
+    document.getElementById('drilldownBody').innerHTML = html;
+}
+
+function drilldownGoBack() {
+    if (drilldownCategory) {
+        openCategoryDrilldown(drilldownCategory);
+    }
+}
+
+function closeDrilldown() {
+    document.getElementById('drilldownOverlay').classList.remove('show');
+    drilldownCategory = null;
+    drilldownMerchant = null;
+}
+
+function escapeHtml(str) {
+    return str.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 // ===================== BUDGET BARS =====================
@@ -1463,7 +1776,7 @@ function renderBudgetBars(debits) {
         const overAmount = budget > 0 && spent > budget ? spent - budget : 0;
 
         return `
-            <div class="budget-item">
+            <div class="budget-item clickable-cat" onclick="openCategoryDrilldown('${cat}')">
                 <div class="budget-header">
                     <div class="budget-cat">
                         <span class="dot" style="background:${CAT_COLORS[cat]}"></span>
