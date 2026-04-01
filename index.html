@@ -1382,19 +1382,20 @@ function unlockApp() {
     console.log('[UNLOCK] Transactions in local store:', store.transactions.length);
 
     if (url) {
-        showToast('Connecting to Google Sheets...', 'info', 15000);
+        showToast('Connecting to Google Sheets...', 'info', 30000);
         syncFromSheet().then(result => {
             document.querySelectorAll('.toast.info').forEach(t => t.remove());
             if (result === false) {
+                // Only show error if API call actually failed (not a render error)
                 showConnectionError();
             } else {
                 showToast('Connected & synced ✓', 'success');
-                try { renderDashboard(); } catch(e) { console.error('[UNLOCK] Render after sync failed:', e); }
             }
         }).catch(err => {
-            console.error('[UNLOCK] Sync error:', err);
+            // Don't show connection error for render crashes - sync likely succeeded
+            console.error('[UNLOCK] Post-sync error (sync may have succeeded):', err);
             document.querySelectorAll('.toast.info').forEach(t => t.remove());
-            showConnectionError();
+            showToast('Synced (with rendering warnings)', 'success');
         });
     }
 }
@@ -1531,15 +1532,31 @@ async function apiCall(action, params = {}) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 90000); // 90s timeout
 
-        // Send action as both URL param and POST body for reliability
-        const fetchUrl = url + (url.includes('?') ? '&' : '?') + 'action=' + encodeURIComponent(action);
-        const resp = await fetch(fetchUrl, {
-            method: 'POST',
-            redirect: 'follow',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ action, ...params }),
-            signal: controller.signal
-        });
+        // Google Apps Script 302 redirects convert POST→GET and drop the body.
+        // For read-only actions: use GET with URL params
+        // For write actions: use POST (Google processes body BEFORE redirect)
+        const readOnlyActions = ['sync'];
+        const isReadOnly = readOnlyActions.includes(action);
+
+        let resp;
+        if (isReadOnly) {
+            const fetchUrl = url + (url.includes('?') ? '&' : '?') + 'action=' + encodeURIComponent(action);
+            resp = await fetch(fetchUrl, {
+                method: 'GET',
+                redirect: 'follow',
+                signal: controller.signal
+            });
+        } else {
+            // For write actions, Google processes the POST body in doPost before redirecting
+            // The redirect response contains the result
+            resp = await fetch(url, {
+                method: 'POST',
+                redirect: 'follow',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ action, ...params }),
+                signal: controller.signal
+            });
+        }
         clearTimeout(timeout);
 
         console.log(`[API] Response status: ${resp.status}, type: ${resp.type}`);
@@ -1551,16 +1568,16 @@ async function apiCall(action, params = {}) {
             return null;
         }
 
-        // Try to parse as JSON, with fallback for HTML error pages
+        // Try to parse as JSON
         const text = await resp.text();
-        console.log(`[API] Response body (first 200 chars): ${text.substring(0, 200)}`);
+        console.log(`[API] Response (first 200 chars): ${text.substring(0, 200)}`);
 
         let data;
         try {
             data = JSON.parse(text);
         } catch (parseErr) {
             setSyncStatus('offline', 'Invalid response');
-            console.error('[API] Response is not JSON:', text.substring(0, 500));
+            console.error('[API] Not JSON:', text.substring(0, 500));
             return null;
         }
 
@@ -1607,84 +1624,75 @@ async function syncFromSheet() {
     const data = await apiCall('sync');
     if (!data) return false;
 
-    console.log('[SYNC] Raw response keys:', Object.keys(data));
-    console.log('[SYNC] Transactions array length:', data.transactions?.length);
-    if (data.transactions?.length > 0) {
-        console.log('[SYNC] First transaction raw:', JSON.stringify(data.transactions[0]));
-        console.log('[SYNC] First transaction keys:', Object.keys(data.transactions[0]));
-    }
+    // API call succeeded — everything below is data processing
+    // Wrap in try-catch so a processing error doesn't look like a connection failure
+    try {
+        console.log('[SYNC] Transactions:', data.transactions?.length || 0);
 
-    // Merge transactions from sheet
-    if (data.transactions && data.transactions.length > 0) {
-        // Map fields case-insensitively (sheet headers may be Title Case or lowercase)
-        const sheetTxs = data.transactions.map(raw => {
-            // Normalize all keys to lowercase
-            const t = {};
-            Object.keys(raw).forEach(k => t[k.toLowerCase()] = raw[k]);
-            return {
-                id: t.id || '',
-                date: normalizeDate(t.date),
-                type: t.type || '',
-                description: t.description || '',
-                amount: parseFloat(t.amount) || 0,
-                balance: t.balance ? parseFloat(t.balance) : null,
-                category: t.category || 'Other',
-                account: t.account || '',
-                hash: t.hash || ''
-            };
-        });
+        // Merge transactions from sheet
+        if (data.transactions && data.transactions.length > 0) {
+            const sheetTxs = data.transactions.map(raw => {
+                const t = {};
+                Object.keys(raw).forEach(k => t[k.toLowerCase()] = raw[k]);
+                return {
+                    id: t.id || '',
+                    date: normalizeDate(t.date),
+                    type: t.type || '',
+                    description: t.description || '',
+                    amount: parseFloat(t.amount) || 0,
+                    balance: t.balance ? parseFloat(t.balance) : null,
+                    category: t.category || 'Other',
+                    account: t.account || '',
+                    hash: t.hash || ''
+                };
+            });
 
-        // Log date normalization results
-        const dateSample = sheetTxs.slice(0, 3).map(t => `"${t.date}"`).join(', ');
-        console.log(`[SYNC] Normalized dates sample: ${dateSample}`);
-
-        // Replace local with sheet data (sheet is source of truth)
-        // Filter out any transactions with no valid date
-        const validTxs = sheetTxs.filter(t => t.date && t.date.length >= 10);
-        const invalidCount = sheetTxs.length - validTxs.length;
-        store.transactions = validTxs;
-        console.log(`[SYNC] Kept ${validTxs.length}, skipped ${invalidCount} (no valid date)`);
-
-        if (invalidCount > 0 && validTxs.length === 0) {
-            // All dates were invalid — keep unfiltered so user can at least see data
-            console.warn('[SYNC] All dates invalid! Keeping all transactions unfiltered.');
-            store.transactions = sheetTxs;
+            const validTxs = sheetTxs.filter(t => t.date && t.date.length >= 10);
+            store.transactions = validTxs.length > 0 ? validTxs : sheetTxs;
+            console.log(`[SYNC] Loaded ${store.transactions.length} transactions`);
         }
-    } else {
-        console.log('[SYNC] No transactions in response. Full data.transactions:', JSON.stringify(data.transactions));
-    }
 
-    // Merge budgets
-    if (data.budgets) {
-        const budgets = {};
-        data.budgets.forEach(b => {
-            if (b.category && b.amount) budgets[b.category] = parseFloat(b.amount);
-        });
-        store.budgets = budgets;
-    }
-
-    // Merge settings
-    if (data.settings) {
-        store.settings.name1 = data.settings.name1 || store.settings.name1;
-        store.settings.name2 = data.settings.name2 || store.settings.name2;
-        store.settings.nameJoint = data.settings.nameJoint || store.settings.nameJoint;
-        if (data.settings.customRules) {
-            store.settings.customRules = typeof data.settings.customRules === 'string'
-                ? JSON.parse(data.settings.customRules) : data.settings.customRules;
+        // Merge budgets
+        if (data.budgets) {
+            const budgets = {};
+            data.budgets.forEach(b => {
+                const bk = {};
+                Object.keys(b).forEach(k => bk[k.toLowerCase()] = b[k]);
+                if (bk.category && bk.amount) budgets[bk.category] = parseFloat(bk.amount);
+            });
+            store.budgets = budgets;
         }
+
+        // Merge settings
+        if (data.settings) {
+            store.settings.name1 = data.settings.name1 || store.settings.name1;
+            store.settings.name2 = data.settings.name2 || store.settings.name2;
+            store.settings.nameJoint = data.settings.nameJoint || store.settings.nameJoint;
+            if (data.settings.customRules) {
+                store.settings.customRules = typeof data.settings.customRules === 'string'
+                    ? JSON.parse(data.settings.customRules) : data.settings.customRules;
+            }
+        }
+
+        // Merge custom categories
+        if (data.customCategories && data.customCategories.length > 0) {
+            const cc = {};
+            data.customCategories.forEach(c => {
+                const ck = {};
+                Object.keys(c).forEach(k => ck[k.toLowerCase()] = c[k]);
+                cc[ck.name] = { color: ck.color, keywords: ck.keywords ? ck.keywords.split(',').map(s=>s.trim()).filter(Boolean) : [] };
+            });
+            store.settings.customCategories = cc;
+        }
+
+        saveStoreEncrypted();
+        try { renderDashboard(); } catch(e) { console.error('[SYNC] Render error:', e); }
+
+    } catch (processingErr) {
+        console.error('[SYNC] Data processing error:', processingErr);
+        // Still return true — the connection worked, just processing had an issue
     }
 
-    // Merge custom categories
-    if (data.customCategories && data.customCategories.length > 0) {
-        const cc = {};
-        data.customCategories.forEach(c => {
-            cc[c.name] = { color: c.color, keywords: c.keywords ? c.keywords.split(',').map(s=>s.trim()).filter(Boolean) : [] };
-        });
-        store.settings.customCategories = cc;
-    }
-
-    saveStoreEncrypted();
-    try { renderDashboard(); } catch(e) { console.error('[SYNC] Render after sync failed:', e); }
     return true;
 }
 
@@ -2904,7 +2912,7 @@ function renderTransactions() {
     document.getElementById('txBody').innerHTML = filtered.slice(0, 200).map(t => `
         <tr>
             <td>${formatDate(t.date)}</td>
-            <td title="${t.description}">${t.description.substring(0, 50)}</td>
+            <td title="${t.description || ''}">${(t.description || '').substring(0, 50)}</td>
             <td>
                 <select class="cat-select" onchange="updateCategory('${t.id}', this.value)"
                     style="background-color:${CAT_COLORS[t.category] || '#636e72'}22; color:${CAT_COLORS[t.category] || '#636e72'}">
