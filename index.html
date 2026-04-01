@@ -1704,22 +1704,27 @@ async function assignUpload(account) {
         hash: txHash({ ...tx, account: account })
     }));
 
-    // Deduplicate locally by hash
-    const existingHashes = new Set(store.transactions.map(t => t.hash || txHash(t)));
-    const unique = newTxs.filter(t => !existingHashes.has(t.hash));
-
-    store.transactions.push(...unique);
-    saveStore();
-
-    // Push to Google Sheets (server also deduplicates)
-    if (getApiUrl() && unique.length > 0) {
-        const result = await apiCall('addTransactions', { transactions: unique });
+    if (getApiUrl()) {
+        // Online mode: send all to server, let server deduplicate
+        const result = await apiCall('addTransactions', { transactions: newTxs });
         if (result) {
-            showToast(`Added ${result.added} to ${getAccountName(account)} (${result.skipped} duplicates skipped)`, 'success');
+            showToast(`Added ${result.added} to ${getAccountName(account)}${result.skipped ? ` (${result.skipped} duplicates skipped)` : ''}`, 'success');
+            // Re-sync to get the updated data from sheet
+            await syncFromSheet();
         } else {
+            // Offline fallback — dedup locally
+            const existingHashes = new Set(store.transactions.map(t => t.hash || txHash(t)));
+            const unique = newTxs.filter(t => !existingHashes.has(t.hash));
+            store.transactions.push(...unique);
+            saveStore();
             showToast(`Added ${unique.length} locally to ${getAccountName(account)} (offline)`, 'success');
         }
     } else {
+        // No API — dedup locally
+        const existingHashes = new Set(store.transactions.map(t => t.hash || txHash(t)));
+        const unique = newTxs.filter(t => !existingHashes.has(t.hash));
+        store.transactions.push(...unique);
+        saveStore();
         showToast(`Added ${unique.length} transactions to ${getAccountName(account)}`, 'success');
     }
 
@@ -1752,9 +1757,16 @@ function getFilteredTransactions() {
     if (currentAccount !== 'all') {
         txs = txs.filter(t => t.account === currentAccount);
     }
-    const month = document.getElementById('monthFilter').value;
-    if (month !== 'all') {
-        txs = txs.filter(t => t.date.substring(0, 7) === month);
+    const filter = document.getElementById('monthFilter').value;
+    if (filter !== 'all') {
+        if (filter.startsWith('y:')) {
+            // Year filter
+            const year = filter.substring(2);
+            txs = txs.filter(t => t.date.substring(0, 4) === year);
+        } else {
+            // Month filter
+            txs = txs.filter(t => t.date.substring(0, 7) === filter);
+        }
     }
     return txs;
 }
@@ -1829,10 +1841,19 @@ function updateAccountTabLabels() {
 
 function updateMonthFilter() {
     const months = [...new Set(store.transactions.map(t => t.date.substring(0, 7)))].sort().reverse();
+    const years = [...new Set(months.map(m => m.substring(0, 4)))].sort().reverse();
     const sel = document.getElementById('monthFilter');
     const current = sel.value;
-    sel.innerHTML = '<option value="all">All Months</option>' +
-        months.map(m => `<option value="${m}"${m===current?' selected':''}>${formatMonth(m)}</option>`).join('');
+
+    let html = '<option value="all">All Time</option>';
+    years.forEach(year => {
+        html += `<option value="y:${year}"${('y:'+year)===current?' selected':''}>${year} (Full Year)</option>`;
+        const yearMonths = months.filter(m => m.startsWith(year));
+        yearMonths.forEach(m => {
+            html += `<option value="${m}"${m===current?' selected':''}>&nbsp;&nbsp;${formatMonth(m)}</option>`;
+        });
+    });
+    sel.innerHTML = html;
 }
 
 function formatMonth(ym) {
