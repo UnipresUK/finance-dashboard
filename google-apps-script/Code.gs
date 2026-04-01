@@ -15,7 +15,14 @@ function sheetToObjects(sheet) {
   const headers = data[0];
   return data.slice(1).filter(row => row[0] !== '').map(row => {
     const obj = {};
-    headers.forEach((h, i) => obj[h] = row[i]);
+    headers.forEach((h, i) => {
+      let val = row[i];
+      // Convert Date objects to YYYY-MM-DD string
+      if (val instanceof Date) {
+        val = Utilities.formatDate(val, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      }
+      obj[h] = val;
+    });
     return obj;
   });
 }
@@ -54,6 +61,8 @@ function doPost(e) {
 // ─── Router ─────────────────────────────────────────────────────
 function route(p) {
   try {
+    // Clean action parameter (strip trailing ? or whitespace)
+    if (p.action) p.action = p.action.replace(/[?\s]/g, '').trim();
     switch (p.action) {
       case 'sync':                return doSync(p);
       case 'addTransactions':     return doAddTransactions(p);

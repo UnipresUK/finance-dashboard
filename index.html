@@ -1438,10 +1438,9 @@ async function syncFromSheet() {
 
     // Merge transactions from sheet
     if (data.transactions && data.transactions.length > 0) {
-        const existingIds = new Set(store.transactions.map(t => t.id));
         const sheetTxs = data.transactions.map(t => ({
             id: t.id,
-            date: t.date,
+            date: normalizeDate(t.date),
             type: t.type,
             description: t.description,
             amount: parseFloat(t.amount) || 0,
@@ -1452,6 +1451,9 @@ async function syncFromSheet() {
         }));
         // Replace local with sheet data (sheet is source of truth)
         store.transactions = sheetTxs;
+        console.log(`Synced ${sheetTxs.length} transactions from sheet. Sample date: ${sheetTxs[0]?.date}`);
+    } else {
+        console.log('No transactions returned from sheet. Raw data:', JSON.stringify(data.transactions?.slice(0,2)));
     }
 
     // Merge budgets
@@ -1704,6 +1706,29 @@ function parseDate(dateStr) {
         return `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
     }
     return dateStr;
+}
+
+function normalizeDate(dateVal) {
+    if (!dateVal) return '';
+    const s = String(dateVal);
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // ISO format: 2025-03-03T00:00:00.000Z
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.substring(0, 10);
+    // Google Sheets date string: "Mon Mar 03 2025 00:00:00 GMT..."
+    // or other parseable date strings
+    try {
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) {
+            return d.toISOString().substring(0, 10);
+        }
+    } catch(_) {}
+    // DD/MM/YYYY
+    const parts = s.split('/');
+    if (parts.length === 3) {
+        return `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+    }
+    return s;
 }
 
 // ===================== FILE UPLOAD =====================
