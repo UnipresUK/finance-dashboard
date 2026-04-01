@@ -1235,12 +1235,55 @@ async function handlePinComplete() {
     }
 }
 
-function unlockApp() {
+async function unlockApp() {
     document.getElementById('pinScreen').style.display = 'none';
     document.getElementById('appWrapper').style.display = 'block';
     renderDashboard();
-    // Sync from Google Sheets in background
-    syncFromSheet();
+
+    // Auto-test Google Sheets connection on unlock
+    const url = getApiUrl();
+    if (url) {
+        showToast('Connecting to Google Sheets...', 'info', 15000);
+        const result = await syncFromSheet();
+        // Clear the connecting toast
+        document.querySelectorAll('.toast.info').forEach(t => t.remove());
+        if (result === false) {
+            showConnectionError();
+        } else {
+            showToast('Connected & synced ✓', 'success');
+        }
+    }
+}
+
+function showConnectionError() {
+    const overlay = document.createElement('div');
+    overlay.id = 'connectionErrorOverlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:10000;padding:20px;';
+    overlay.innerHTML = `
+        <div style="background:#1e1e2e;border:2px solid #e74c3c;border-radius:16px;padding:32px;max-width:440px;width:100%;text-align:center;">
+            <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+            <h2 style="color:#e74c3c;margin:0 0 12px;">Connection Failed</h2>
+            <p style="color:#ccc;margin:0 0 20px;line-height:1.6;font-size:14px;">
+                Could not connect to Google Sheets.<br>
+                Data loaded from local storage only.<br><br>
+                <strong style="color:#fff;">Common fixes:</strong><br>
+                • Redeploy Apps Script as a <em>new version</em><br>
+                • Check the API URL in Settings<br>
+                • Ensure access is set to <em>Anyone</em>
+            </p>
+            <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+                <button onclick="this.closest('#connectionErrorOverlay').remove()"
+                    style="padding:10px 24px;background:#6c5ce7;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">
+                    Continue Offline
+                </button>
+                <button onclick="this.closest('#connectionErrorOverlay').remove();document.querySelector('[data-section=settings]')?.click()"
+                    style="padding:10px 24px;background:#444;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;">
+                    Go to Settings
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
 }
 
 // Override saveStore to encrypt
@@ -1387,11 +1430,11 @@ async function syncFromSheet() {
     const url = getApiUrl();
     if (!url) {
         setSyncStatus('none', 'Not connected');
-        return;
+        return false;
     }
 
     const data = await apiCall('sync');
-    if (!data) return;
+    if (!data) return false;
 
     // Merge transactions from sheet
     if (data.transactions && data.transactions.length > 0) {
@@ -1442,6 +1485,7 @@ async function syncFromSheet() {
 
     saveStoreEncrypted();
     renderDashboard();
+    return true;
 }
 
 async function testConnection() {
