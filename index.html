@@ -1475,6 +1475,13 @@ async function syncFromSheet() {
     const data = await apiCall('sync');
     if (!data) return false;
 
+    console.log('[SYNC] Raw response keys:', Object.keys(data));
+    console.log('[SYNC] Transactions array length:', data.transactions?.length);
+    if (data.transactions?.length > 0) {
+        console.log('[SYNC] First transaction raw:', JSON.stringify(data.transactions[0]));
+        console.log('[SYNC] First transaction keys:', Object.keys(data.transactions[0]));
+    }
+
     // Merge transactions from sheet
     if (data.transactions && data.transactions.length > 0) {
         const sheetTxs = data.transactions.map(t => ({
@@ -1488,14 +1495,25 @@ async function syncFromSheet() {
             account: t.account || '',
             hash: t.hash || ''
         }));
+
+        // Log date normalization results
+        const dateSample = sheetTxs.slice(0, 3).map(t => `"${t.date}"`).join(', ');
+        console.log(`[SYNC] Normalized dates sample: ${dateSample}`);
+
         // Replace local with sheet data (sheet is source of truth)
         // Filter out any transactions with no valid date
         const validTxs = sheetTxs.filter(t => t.date && t.date.length >= 10);
         const invalidCount = sheetTxs.length - validTxs.length;
         store.transactions = validTxs;
-        console.log(`Synced ${validTxs.length} transactions from sheet (${invalidCount} skipped - no date). Sample date: ${validTxs[0]?.date}`);
+        console.log(`[SYNC] Kept ${validTxs.length}, skipped ${invalidCount} (no valid date)`);
+
+        if (invalidCount > 0 && validTxs.length === 0) {
+            // All dates were invalid — keep unfiltered so user can at least see data
+            console.warn('[SYNC] All dates invalid! Keeping all transactions unfiltered.');
+            store.transactions = sheetTxs;
+        }
     } else {
-        console.log('No transactions returned from sheet. Raw data:', JSON.stringify(data.transactions?.slice(0,2)));
+        console.log('[SYNC] No transactions in response. Full data.transactions:', JSON.stringify(data.transactions));
     }
 
     // Merge budgets
