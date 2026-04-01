@@ -1484,17 +1484,23 @@ async function syncFromSheet() {
 
     // Merge transactions from sheet
     if (data.transactions && data.transactions.length > 0) {
-        const sheetTxs = data.transactions.map(t => ({
-            id: t.id,
-            date: normalizeDate(t.date),
-            type: t.type,
-            description: t.description,
-            amount: parseFloat(t.amount) || 0,
-            balance: t.balance ? parseFloat(t.balance) : null,
-            category: t.category || 'Other',
-            account: t.account || '',
-            hash: t.hash || ''
-        }));
+        // Map fields case-insensitively (sheet headers may be Title Case or lowercase)
+        const sheetTxs = data.transactions.map(raw => {
+            // Normalize all keys to lowercase
+            const t = {};
+            Object.keys(raw).forEach(k => t[k.toLowerCase()] = raw[k]);
+            return {
+                id: t.id || '',
+                date: normalizeDate(t.date),
+                type: t.type || '',
+                description: t.description || '',
+                amount: parseFloat(t.amount) || 0,
+                balance: t.balance ? parseFloat(t.balance) : null,
+                category: t.category || 'Other',
+                account: t.account || '',
+                hash: t.hash || ''
+            };
+        });
 
         // Log date normalization results
         const dateSample = sheetTxs.slice(0, 3).map(t => `"${t.date}"`).join(', ');
