@@ -1485,8 +1485,11 @@ async function syncFromSheet() {
             hash: t.hash || ''
         }));
         // Replace local with sheet data (sheet is source of truth)
-        store.transactions = sheetTxs;
-        console.log(`Synced ${sheetTxs.length} transactions from sheet. Sample date: ${sheetTxs[0]?.date}`);
+        // Filter out any transactions with no valid date
+        const validTxs = sheetTxs.filter(t => t.date && t.date.length >= 10);
+        const invalidCount = sheetTxs.length - validTxs.length;
+        store.transactions = validTxs;
+        console.log(`Synced ${validTxs.length} transactions from sheet (${invalidCount} skipped - no date). Sample date: ${validTxs[0]?.date}`);
     } else {
         console.log('No transactions returned from sheet. Raw data:', JSON.stringify(data.transactions?.slice(0,2)));
     }
@@ -1902,10 +1905,10 @@ function getFilteredTransactions() {
         if (filter.startsWith('y:')) {
             // Year filter
             const year = filter.substring(2);
-            txs = txs.filter(t => t.date.substring(0, 4) === year);
+            txs = txs.filter(t => t.date && t.date.substring(0, 4) === year);
         } else {
             // Month filter
-            txs = txs.filter(t => t.date.substring(0, 7) === filter);
+            txs = txs.filter(t => t.date && t.date.substring(0, 7) === filter);
         }
     }
     return txs;
@@ -1968,7 +1971,8 @@ function renderDashboard() {
 
 function getDaysInRange(txs) {
     if (!txs.length) return 1;
-    const dates = txs.map(t => new Date(t.date).getTime());
+    const dates = txs.filter(t => t.date).map(t => new Date(t.date).getTime()).filter(d => !isNaN(d));
+    if (!dates.length) return 1;
     const range = (Math.max(...dates) - Math.min(...dates)) / (1000*60*60*24);
     return Math.max(1, Math.round(range));
 }
@@ -1980,8 +1984,8 @@ function updateAccountTabLabels() {
 }
 
 function updateMonthFilter() {
-    const months = [...new Set(store.transactions.map(t => t.date.substring(0, 7)))].sort().reverse();
-    const years = [...new Set(months.map(m => m.substring(0, 4)))].sort().reverse();
+    const months = [...new Set(store.transactions.filter(t => t.date).map(t => t.date.substring(0, 7)))].sort().reverse();
+    const years = [...new Set(months.filter(m => m).map(m => m.substring(0, 4)))].sort().reverse();
     const sel = document.getElementById('monthFilter');
     const current = sel.value;
 
@@ -2183,7 +2187,7 @@ function drilldownToMerchant(merchantName, category) {
     `;
 
     // Show all transactions
-    const sorted = [...txs].sort((a, b) => b.date.localeCompare(a.date));
+    const sorted = [...txs].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     let html = '<div class="drilldown-tx-list"><h3>All Transactions</h3>';
     html += sorted.map(t => `
         <div class="drilldown-tx-item">
@@ -2268,6 +2272,7 @@ function renderTrendChart() {
     const monthlySpend = {};
     const monthlyIncome = {};
     txs.forEach(t => {
+        if (!t.date) return;
         const m = t.date.substring(0, 7);
         if (t.amount < 0) {
             monthlySpend[m] = (monthlySpend[m] || 0) + Math.abs(t.amount);
@@ -2413,7 +2418,7 @@ function renderTransactions() {
     if (typeFilter === 'debit') filtered = filtered.filter(t => t.amount < 0);
     if (typeFilter === 'credit') filtered = filtered.filter(t => t.amount > 0);
 
-    filtered.sort((a,b) => b.date.localeCompare(a.date));
+    filtered.sort((a,b) => (b.date || '').localeCompare(a.date || ''));
 
     document.getElementById('txCount').textContent = `${filtered.length} of ${txs.length}`;
 
@@ -2507,7 +2512,7 @@ function renderAllAccountsOverview() {
 
     document.getElementById('accountBreakdownGrid').innerHTML = accounts.map(acc => {
         let txs = store.transactions.filter(t => t.account === acc);
-        if (month !== 'all') txs = txs.filter(t => t.date.substring(0, 7) === month);
+        if (month !== 'all') txs = txs.filter(t => t.date && t.date.substring(0, 7) === month);
 
         const spent = txs.filter(t => t.amount < 0).reduce((s,t) => s + Math.abs(t.amount), 0);
         const income = txs.filter(t => t.amount > 0).reduce((s,t) => s + t.amount, 0);
