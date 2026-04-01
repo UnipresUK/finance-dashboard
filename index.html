@@ -1398,7 +1398,7 @@ async function apiCall(action, params = {}) {
     try {
         setSyncStatus('syncing', 'Syncing...');
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout
+        const timeout = setTimeout(() => controller.abort(), 90000); // 90s timeout
 
         // Google Apps Script needs redirect:follow and text/plain to avoid CORS preflight
         const resp = await fetch(url, {
@@ -1552,7 +1552,7 @@ async function syncFromSheet() {
     }
 
     saveStoreEncrypted();
-    renderDashboard();
+    try { renderDashboard(); } catch(e) { console.error('[SYNC] Render after sync failed:', e); }
     return true;
 }
 
