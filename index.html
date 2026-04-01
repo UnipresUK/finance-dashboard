@@ -1339,23 +1339,34 @@ async function apiCall(action, params = {}) {
 
     try {
         setSyncStatus('syncing', 'Syncing...');
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout
+
         const resp = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify({ action, ...params })
+            body: JSON.stringify({ action, ...params }),
+            signal: controller.signal
         });
+        clearTimeout(timeout);
+
         const data = await resp.json();
         if (data.ok) {
             setSyncStatus('synced', 'Synced');
             return data.data;
         } else {
-            setSyncStatus('offline', 'Error');
+            setSyncStatus('offline', 'Error: ' + (data.error || 'Unknown'));
             console.error('API error:', data.error);
             return null;
         }
     } catch (err) {
-        setSyncStatus('offline', 'Offline');
-        console.error('API call failed:', err);
+        if (err.name === 'AbortError') {
+            setSyncStatus('offline', 'Timeout');
+            console.error('API call timed out:', action);
+        } else {
+            setSyncStatus('offline', 'Offline');
+            console.error('API call failed:', err);
+        }
         return null;
     }
 }
@@ -1697,6 +1708,9 @@ function processNextUpload() {
 async function assignUpload(account) {
     if (!pendingUploadData) return;
 
+    // Close modal immediately so UI doesn't feel stuck
+    document.getElementById('accountSelectModal').classList.remove('show');
+
     const newTxs = pendingUploadData.map(tx => ({
         ...tx,
         account: account,
@@ -1704,20 +1718,43 @@ async function assignUpload(account) {
         hash: txHash({ ...tx, account: account })
     }));
 
+    pendingUploadData = null;
+
     if (getApiUrl()) {
-        // Online mode: send all to server, let server deduplicate
-        const result = await apiCall('addTransactions', { transactions: newTxs });
-        if (result) {
-            showToast(`Added ${result.added} to ${getAccountName(account)}${result.skipped ? ` (${result.skipped} duplicates skipped)` : ''}`, 'success');
+        // Online mode: batch upload in chunks of 100 to avoid Apps Script timeout
+        const BATCH_SIZE = 100;
+        let totalAdded = 0;
+        let totalSkipped = 0;
+        const totalBatches = Math.ceil(newTxs.length / BATCH_SIZE);
+
+        showToast(`Uploading ${newTxs.length} transactions to ${getAccountName(account)}... (0/${totalBatches} batches)`, 'info', 60000);
+
+        let allSucceeded = true;
+        for (let i = 0; i < newTxs.length; i += BATCH_SIZE) {
+            const batch = newTxs.slice(i, i + BATCH_SIZE);
+            const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+            showToast(`Uploading batch ${batchNum}/${totalBatches} (${batch.length} transactions)...`, 'info', 60000);
+
+            const result = await apiCall('addTransactions', { transactions: batch });
+            if (result) {
+                totalAdded += result.added;
+                totalSkipped += result.skipped;
+            } else {
+                allSucceeded = false;
+                // Offline fallback for remaining — add locally
+                const existingHashes = new Set(store.transactions.map(t => t.hash || txHash(t)));
+                const remaining = newTxs.slice(i).filter(t => !existingHashes.has(t.hash));
+                store.transactions.push(...remaining);
+                saveStore();
+                showToast(`Connection lost. Added ${remaining.length} locally (offline)`, 'warning');
+                break;
+            }
+        }
+
+        if (allSucceeded) {
+            showToast(`Added ${totalAdded} to ${getAccountName(account)}${totalSkipped ? ` (${totalSkipped} duplicates skipped)` : ''}`, 'success');
             // Re-sync to get the updated data from sheet
             await syncFromSheet();
-        } else {
-            // Offline fallback — dedup locally
-            const existingHashes = new Set(store.transactions.map(t => t.hash || txHash(t)));
-            const unique = newTxs.filter(t => !existingHashes.has(t.hash));
-            store.transactions.push(...unique);
-            saveStore();
-            showToast(`Added ${unique.length} locally to ${getAccountName(account)} (offline)`, 'success');
         }
     } else {
         // No API — dedup locally
@@ -1728,8 +1765,7 @@ async function assignUpload(account) {
         showToast(`Added ${unique.length} transactions to ${getAccountName(account)}`, 'success');
     }
 
-    document.getElementById('accountSelectModal').classList.remove('show');
-    pendingUploadData = null;
+    renderDashboard();
     uploadQueue.shift();
     processNextUpload();
 }
@@ -2568,12 +2604,16 @@ function clearAllData() {
 }
 
 // ===================== TOAST =====================
-function showToast(msg, type) {
+function showToast(msg, type, duration = 3000) {
+    // Remove any existing toasts if showing a progress update
+    if (type === 'info') {
+        document.querySelectorAll('.toast.info').forEach(t => t.remove());
+    }
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     toast.textContent = msg;
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+    setTimeout(() => toast.remove(), duration);
 }
 
 // ===================== DRAG & DROP =====================
