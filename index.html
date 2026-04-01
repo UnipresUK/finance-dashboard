@@ -1235,23 +1235,29 @@ async function handlePinComplete() {
     }
 }
 
-async function unlockApp() {
+function unlockApp() {
     document.getElementById('pinScreen').style.display = 'none';
     document.getElementById('appWrapper').style.display = 'block';
     renderDashboard();
 
-    // Auto-test Google Sheets connection on unlock
+    // Auto-test Google Sheets connection on unlock (fire and forget safely)
     const url = getApiUrl();
     if (url) {
         showToast('Connecting to Google Sheets...', 'info', 15000);
-        const result = await syncFromSheet();
-        // Clear the connecting toast
-        document.querySelectorAll('.toast.info').forEach(t => t.remove());
-        if (result === false) {
+        syncFromSheet().then(result => {
+            // Clear the connecting toast
+            document.querySelectorAll('.toast.info').forEach(t => t.remove());
+            if (result === false) {
+                showConnectionError();
+            } else {
+                showToast('Connected & synced ✓', 'success');
+                renderDashboard();
+            }
+        }).catch(err => {
+            console.error('Sync error on unlock:', err);
+            document.querySelectorAll('.toast.info').forEach(t => t.remove());
             showConnectionError();
-        } else {
-            showToast('Connected & synced ✓', 'success');
-        }
+        });
     }
 }
 
