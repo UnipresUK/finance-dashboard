@@ -1238,26 +1238,30 @@ async function handlePinComplete() {
 function unlockApp() {
     document.getElementById('pinScreen').style.display = 'none';
     document.getElementById('appWrapper').style.display = 'block';
-    renderDashboard();
+
+    try {
+        renderDashboard();
+    } catch (err) {
+        console.error('[UNLOCK] Initial render failed (will retry after sync):', err);
+    }
 
     // Auto-test Google Sheets connection on unlock
     const url = getApiUrl();
     console.log('[UNLOCK] API URL:', url ? url.substring(0, 50) + '...' : '(empty)');
-    console.log('[UNLOCK] All localStorage keys:', Object.keys(localStorage).join(', '));
+    console.log('[UNLOCK] Transactions in local store:', store.transactions.length);
 
     if (url) {
         showToast('Connecting to Google Sheets...', 'info', 15000);
         syncFromSheet().then(result => {
-            // Clear the connecting toast
             document.querySelectorAll('.toast.info').forEach(t => t.remove());
             if (result === false) {
                 showConnectionError();
             } else {
                 showToast('Connected & synced ✓', 'success');
-                renderDashboard();
+                try { renderDashboard(); } catch(e) { console.error('[UNLOCK] Render after sync failed:', e); }
             }
         }).catch(err => {
-            console.error('Sync error on unlock:', err);
+            console.error('[UNLOCK] Sync error:', err);
             document.querySelectorAll('.toast.info').forEach(t => t.remove());
             showConnectionError();
         });
@@ -2448,6 +2452,7 @@ function renderTransactions() {
 }
 
 function formatDate(d) {
+    if (!d) return '—';
     const [y,m,day] = d.split('-');
     return `${day}/${m}/${y}`;
 }

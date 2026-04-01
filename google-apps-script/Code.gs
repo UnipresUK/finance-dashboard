@@ -1,3 +1,5 @@
+// ─── Finance Dashboard - Apps Script Backend ────────────────────
+// REV: 2 (2026-04-01) - Date formatting fix
 // ─── Configuration ───────────────────────────────────────────────
 const SPREADSHEET_ID = '1xHqwlTWMthb7U_L1ymMcxyCgpvPzFr3n4zrapqO5o9Y';
 
