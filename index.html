@@ -1240,8 +1240,11 @@ function unlockApp() {
     document.getElementById('appWrapper').style.display = 'block';
     renderDashboard();
 
-    // Auto-test Google Sheets connection on unlock (fire and forget safely)
+    // Auto-test Google Sheets connection on unlock
     const url = getApiUrl();
+    console.log('[UNLOCK] API URL:', url ? url.substring(0, 50) + '...' : '(empty)');
+    console.log('[UNLOCK] All localStorage keys:', Object.keys(localStorage).join(', '));
+
     if (url) {
         showToast('Connecting to Google Sheets...', 'info', 15000);
         syncFromSheet().then(result => {
@@ -1386,35 +1389,61 @@ async function apiCall(action, params = {}) {
     const url = getApiUrl();
     if (!url) return null;
 
+    console.log(`[API] Calling ${action}...`);
+
     try {
         setSyncStatus('syncing', 'Syncing...');
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 45000); // 45s timeout
 
+        // Google Apps Script needs redirect:follow and text/plain to avoid CORS preflight
         const resp = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'text/plain' },
+            redirect: 'follow',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify({ action, ...params }),
             signal: controller.signal
         });
         clearTimeout(timeout);
 
-        const data = await resp.json();
+        console.log(`[API] Response status: ${resp.status}, type: ${resp.type}`);
+
+        // Check if response is OK
+        if (!resp.ok) {
+            setSyncStatus('offline', `HTTP ${resp.status}`);
+            console.error(`[API] HTTP error: ${resp.status} ${resp.statusText}`);
+            return null;
+        }
+
+        // Try to parse as JSON, with fallback for HTML error pages
+        const text = await resp.text();
+        console.log(`[API] Response body (first 200 chars): ${text.substring(0, 200)}`);
+
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (parseErr) {
+            setSyncStatus('offline', 'Invalid response');
+            console.error('[API] Response is not JSON:', text.substring(0, 500));
+            return null;
+        }
+
         if (data.ok) {
             setSyncStatus('synced', 'Synced');
+            console.log(`[API] ${action} succeeded`);
             return data.data;
         } else {
             setSyncStatus('offline', 'Error: ' + (data.error || 'Unknown'));
-            console.error('API error:', data.error);
+            console.error('[API] Server error:', data.error);
             return null;
         }
     } catch (err) {
         if (err.name === 'AbortError') {
             setSyncStatus('offline', 'Timeout');
-            console.error('API call timed out:', action);
+            console.error('[API] Request timed out:', action);
         } else {
             setSyncStatus('offline', 'Offline');
-            console.error('API call failed:', err);
+            console.error('[API] Fetch failed:', err.message, err);
         }
         return null;
     }
