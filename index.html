@@ -407,6 +407,79 @@
             color: #e2e4eb;
         }
 
+        /* Filter Panel (Slicer) */
+        .filter-panel {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            animation: slideDown 0.2s ease;
+        }
+        @keyframes slideDown { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .filter-panel-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .filter-section { margin-bottom: 12px; }
+        .filter-section h4 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .filter-quick-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+        .filter-chip {
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .filter-chip:hover { border-color: var(--accent); color: var(--text); }
+        .filter-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+        .filter-chip-sm {
+            padding: 2px 8px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-dim);
+            font-size: 0.7rem;
+            cursor: pointer;
+        }
+        .filter-chip-sm:hover { border-color: var(--accent); }
+        .filter-months-grid {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .filter-month-chip {
+            padding: 5px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-dim);
+            font-size: 0.78rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .filter-month-chip:hover { border-color: var(--accent); color: var(--text); }
+        .filter-month-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+        .filter-month-chip .year-label { font-weight: 700; background: var(--surface2); border-color: var(--border); color: var(--text); cursor: default; }
+        .filter-panel input[type="date"] {
+            padding: 6px 10px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.85rem;
+        }
+
         /* Sync indicator */
         .sync-status {
             font-size: 0.75rem;
@@ -783,17 +856,46 @@
             <span class="sync-dot none" id="syncDot"></span>
             <span id="syncText">Not connected</span>
         </div>
-        <div class="month-selector">
-            <select id="monthFilter" onchange="renderDashboard()">
-                <option value="all">All Months</option>
-            </select>
-        </div>
+        <button class="btn btn-outline" id="filterBtn" onclick="toggleFilterPanel()">
+            <span id="filterLabel">All Time</span> ▼
+        </button>
         <button class="btn btn-outline" onclick="openSettings()">Settings</button>
         <button class="btn btn-outline" onclick="openBudgets()">Budgets</button>
         <label class="btn btn-primary">
             Upload CSV
             <input type="file" accept=".csv" multiple hidden onchange="handleFileUpload(event)">
         </label>
+    </div>
+</div>
+
+<!-- Filter Slicer Panel -->
+<div class="filter-panel" id="filterPanel" style="display:none">
+    <div class="filter-panel-inner">
+        <div class="filter-section">
+            <h4>Quick Select</h4>
+            <div class="filter-quick-btns">
+                <button class="filter-chip active" onclick="setFilterPreset('all')">All Time</button>
+                <button class="filter-chip" onclick="setFilterPreset('ytd')">Year to Date</button>
+                <button class="filter-chip" onclick="setFilterPreset('last3')">Last 3 Months</button>
+                <button class="filter-chip" onclick="setFilterPreset('last6')">Last 6 Months</button>
+            </div>
+        </div>
+        <div class="filter-section">
+            <h4>Date Range</h4>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <input type="date" id="filterDateFrom" onchange="applyDateRange()">
+                <span style="color:var(--text-dim)">to</span>
+                <input type="date" id="filterDateTo" onchange="applyDateRange()">
+            </div>
+        </div>
+        <div class="filter-section">
+            <h4>Months <button class="filter-chip-sm" onclick="toggleAllMonths()">Toggle All</button></h4>
+            <div class="filter-months-grid" id="filterMonthsGrid"></div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+            <button class="btn btn-outline btn-small" onclick="clearFilter()">Clear</button>
+            <button class="btn btn-primary btn-small" onclick="toggleFilterPanel()">Done</button>
+        </div>
     </div>
 </div>
 
@@ -846,6 +948,35 @@
                 <div class="waste-section">
                     <div class="card-title" style="font-size:0.85rem">Potential Waste</div>
                     <div id="wasteItems"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Weekly & Monthly Analysis -->
+        <div class="card full-width" style="margin-bottom:24px">
+            <div class="card-title">
+                Weekly Spending Analysis
+                <div style="display:flex;gap:4px">
+                    <button class="btn btn-outline btn-small" onclick="setAnalysisPeriod('weekly')" id="btnWeekly">Weekly</button>
+                    <button class="btn btn-outline btn-small" onclick="setAnalysisPeriod('monthly')" id="btnMonthly">Monthly</button>
+                </div>
+            </div>
+            <div class="chart-container" style="height:350px">
+                <canvas id="analysisBarChart"></canvas>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="card">
+                <div class="card-title">Income vs Spending Waterfall</div>
+                <div class="chart-container" style="height:350px">
+                    <canvas id="waterfallChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">Category Comparison by Month</div>
+                <div class="chart-container" style="height:350px">
+                    <canvas id="catCompareChart"></canvas>
                 </div>
             </div>
         </div>
@@ -1923,28 +2054,177 @@ function switchAccount(account) {
     renderDashboard();
 }
 
+// ===================== FILTER SLICER =====================
+let activeFilter = { type: 'all', months: [], dateFrom: null, dateTo: null };
+let analysisPeriod = 'weekly';
+
 function getFilteredTransactions() {
     let txs = store.transactions;
     if (currentAccount !== 'all') {
         txs = txs.filter(t => t.account === currentAccount);
     }
-    const filter = document.getElementById('monthFilter').value;
-    if (filter !== 'all') {
-        if (filter.startsWith('y:')) {
-            // Year filter
-            const year = filter.substring(2);
-            txs = txs.filter(t => t.date && t.date.substring(0, 4) === year);
-        } else {
-            // Month filter
-            txs = txs.filter(t => t.date && t.date.substring(0, 7) === filter);
-        }
+    if (activeFilter.type === 'months' && activeFilter.months.length > 0) {
+        const set = new Set(activeFilter.months);
+        txs = txs.filter(t => t.date && set.has(t.date.substring(0, 7)));
+    } else if (activeFilter.type === 'dateRange' && activeFilter.dateFrom && activeFilter.dateTo) {
+        txs = txs.filter(t => t.date && t.date >= activeFilter.dateFrom && t.date <= activeFilter.dateTo);
     }
     return txs;
+}
+
+function toggleFilterPanel() {
+    const panel = document.getElementById('filterPanel');
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        buildFilterMonths();
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+function buildFilterMonths() {
+    const months = [...new Set(store.transactions.filter(t => t.date).map(t => t.date.substring(0, 7)))].sort().reverse();
+    const years = [...new Set(months.map(m => m.substring(0, 4)))].sort().reverse();
+    const grid = document.getElementById('filterMonthsGrid');
+
+    let html = '';
+    years.forEach(year => {
+        html += `<div style="width:100%;font-size:0.75rem;color:var(--text-dim);margin-top:8px;font-weight:600">${year}</div>`;
+        const yearMonths = months.filter(m => m.startsWith(year));
+        yearMonths.forEach(m => {
+            const active = activeFilter.months.includes(m) ? ' active' : '';
+            html += `<button class="filter-month-chip${active}" data-month="${m}" onclick="toggleMonth('${m}')">${formatMonth(m)}</button>`;
+        });
+    });
+    grid.innerHTML = html;
+    updateFilterLabel();
+}
+
+function toggleMonth(month) {
+    const idx = activeFilter.months.indexOf(month);
+    if (idx >= 0) {
+        activeFilter.months.splice(idx, 1);
+    } else {
+        activeFilter.months.push(month);
+    }
+    activeFilter.type = activeFilter.months.length > 0 ? 'months' : 'all';
+    // Clear date range when using months
+    document.getElementById('filterDateFrom').value = '';
+    document.getElementById('filterDateTo').value = '';
+    activeFilter.dateFrom = null;
+    activeFilter.dateTo = null;
+
+    // Update chip visuals
+    document.querySelectorAll('.filter-month-chip').forEach(btn => {
+        btn.classList.toggle('active', activeFilter.months.includes(btn.dataset.month));
+    });
+    // Update quick select
+    document.querySelectorAll('.filter-quick-btns .filter-chip').forEach(b => b.classList.remove('active'));
+
+    updateFilterLabel();
+    renderDashboard();
+}
+
+function toggleAllMonths() {
+    const allMonths = [...new Set(store.transactions.filter(t => t.date).map(t => t.date.substring(0, 7)))];
+    if (activeFilter.months.length === allMonths.length) {
+        activeFilter.months = [];
+        activeFilter.type = 'all';
+    } else {
+        activeFilter.months = [...allMonths];
+        activeFilter.type = 'months';
+    }
+    buildFilterMonths();
+    renderDashboard();
+}
+
+function setFilterPreset(preset) {
+    activeFilter.months = [];
+    activeFilter.dateFrom = null;
+    activeFilter.dateTo = null;
+    document.getElementById('filterDateFrom').value = '';
+    document.getElementById('filterDateTo').value = '';
+
+    if (preset === 'all') {
+        activeFilter.type = 'all';
+    } else {
+        const now = new Date();
+        const allMonths = [...new Set(store.transactions.filter(t => t.date).map(t => t.date.substring(0, 7)))].sort();
+        let cutoff;
+        if (preset === 'ytd') {
+            cutoff = now.getFullYear() + '-01';
+        } else if (preset === 'last3') {
+            const d = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+            cutoff = d.toISOString().substring(0, 7);
+        } else if (preset === 'last6') {
+            const d = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+            cutoff = d.toISOString().substring(0, 7);
+        }
+        activeFilter.months = allMonths.filter(m => m >= cutoff);
+        activeFilter.type = activeFilter.months.length > 0 ? 'months' : 'all';
+    }
+
+    // Update quick select visuals
+    document.querySelectorAll('.filter-quick-btns .filter-chip').forEach(b => {
+        b.classList.toggle('active', b.textContent.toLowerCase().includes(preset === 'all' ? 'all' : preset === 'ytd' ? 'year' : preset === 'last3' ? '3' : '6'));
+    });
+
+    buildFilterMonths();
+    renderDashboard();
+}
+
+function applyDateRange() {
+    const from = document.getElementById('filterDateFrom').value;
+    const to = document.getElementById('filterDateTo').value;
+    if (from && to) {
+        activeFilter.type = 'dateRange';
+        activeFilter.dateFrom = from;
+        activeFilter.dateTo = to;
+        activeFilter.months = [];
+        // Clear month chips
+        document.querySelectorAll('.filter-month-chip').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.filter-quick-btns .filter-chip').forEach(b => b.classList.remove('active'));
+        updateFilterLabel();
+        renderDashboard();
+    }
+}
+
+function clearFilter() {
+    activeFilter = { type: 'all', months: [], dateFrom: null, dateTo: null };
+    document.getElementById('filterDateFrom').value = '';
+    document.getElementById('filterDateTo').value = '';
+    buildFilterMonths();
+    renderDashboard();
+}
+
+function updateFilterLabel() {
+    const label = document.getElementById('filterLabel');
+    if (activeFilter.type === 'all') {
+        label.textContent = 'All Time';
+    } else if (activeFilter.type === 'dateRange') {
+        label.textContent = `${formatDate(activeFilter.dateFrom)} - ${formatDate(activeFilter.dateTo)}`;
+    } else if (activeFilter.months.length === 1) {
+        label.textContent = formatMonth(activeFilter.months[0]);
+    } else if (activeFilter.months.length <= 3) {
+        label.textContent = activeFilter.months.map(m => formatMonth(m)).join(', ');
+    } else {
+        label.textContent = `${activeFilter.months.length} months selected`;
+    }
+}
+
+function setAnalysisPeriod(period) {
+    analysisPeriod = period;
+    document.getElementById('btnWeekly').classList.toggle('active', period === 'weekly');
+    document.getElementById('btnMonthly').classList.toggle('active', period === 'monthly');
+    renderAnalysisChart();
 }
 
 // ===================== RENDER DASHBOARD =====================
 let categoryChart = null;
 let trendChart = null;
+let analysisChart = null;
+let waterfallChart = null;
+let catCompareChart = null;
 
 function renderDashboard() {
     const hasTx = store.transactions.length > 0;
@@ -1954,7 +2234,7 @@ function renderDashboard() {
     if (!hasTx) return;
 
     updateAccountTabLabels();
-    updateMonthFilter();
+    updateFilterLabel();
 
     const txs = getFilteredTransactions();
     const debits = txs.filter(t => t.amount < 0);
@@ -1993,6 +2273,9 @@ function renderDashboard() {
     renderTrendChart();
     renderTopSpending(debits);
     renderWasteItems(debits);
+    renderAnalysisChart();
+    renderWaterfallChart(credits, debits);
+    renderCatCompareChart();
     renderTransactions();
     renderAllAccountsOverview();
 }
@@ -2011,24 +2294,8 @@ function updateAccountTabLabels() {
     document.querySelector('[data-account="joint"]').textContent = store.settings.nameJoint;
 }
 
-function updateMonthFilter() {
-    const months = [...new Set(store.transactions.filter(t => t.date).map(t => t.date.substring(0, 7)))].sort().reverse();
-    const years = [...new Set(months.filter(m => m).map(m => m.substring(0, 4)))].sort().reverse();
-    const sel = document.getElementById('monthFilter');
-    const current = sel.value;
-
-    let html = '<option value="all">All Time</option>';
-    years.forEach(year => {
-        html += `<option value="y:${year}"${('y:'+year)===current?' selected':''}>${year} (Full Year)</option>`;
-        const yearMonths = months.filter(m => m.startsWith(year));
-        yearMonths.forEach(m => {
-            html += `<option value="${m}"${m===current?' selected':''}>&nbsp;&nbsp;${formatMonth(m)}</option>`;
-        });
-    });
-    sel.innerHTML = html;
-}
-
 function formatMonth(ym) {
+    if (!ym || ym.length < 7) return ym || '';
     const [y,m] = ym.split('-');
     const names = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return `${names[parseInt(m)]} ${y}`;
@@ -2338,6 +2605,185 @@ function renderTrendChart() {
     });
 }
 
+// ===================== ANALYSIS CHARTS =====================
+function getWeekKey(dateStr) {
+    const d = new Date(dateStr);
+    const day = d.getDay() || 7; // Mon=1, Sun=7
+    d.setDate(d.getDate() - day + 1); // Monday
+    return d.toISOString().substring(0, 10);
+}
+
+function renderAnalysisChart() {
+    const txs = getFilteredTransactions();
+    const debits = txs.filter(t => t.amount < 0 && t.date);
+    const credits = txs.filter(t => t.amount > 0 && t.date);
+
+    const periods = {};
+    debits.forEach(t => {
+        const key = analysisPeriod === 'weekly' ? getWeekKey(t.date) : t.date.substring(0, 7);
+        periods[key] = periods[key] || { spend: 0, income: 0 };
+        periods[key].spend += Math.abs(t.amount);
+    });
+    credits.forEach(t => {
+        const key = analysisPeriod === 'weekly' ? getWeekKey(t.date) : t.date.substring(0, 7);
+        periods[key] = periods[key] || { spend: 0, income: 0 };
+        periods[key].income += t.amount;
+    });
+
+    const keys = Object.keys(periods).sort();
+    const labels = keys.map(k => {
+        if (analysisPeriod === 'weekly') {
+            const d = new Date(k);
+            return `${d.getDate()}/${d.getMonth()+1}`;
+        }
+        return formatMonth(k);
+    });
+
+    if (analysisChart) analysisChart.destroy();
+    analysisChart = new Chart(document.getElementById('analysisBarChart'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                { label: 'Income', data: keys.map(k => periods[k].income), backgroundColor: 'rgba(0,184,148,0.7)', borderRadius: 4 },
+                { label: 'Spending', data: keys.map(k => periods[k].spend), backgroundColor: 'rgba(225,112,85,0.7)', borderRadius: 4 }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 }, maxRotation: 45 } },
+                y: { grid: { color: '#2e3347' }, ticks: { color: '#8b8fa3', callback: v => '£' + v.toLocaleString() } }
+            },
+            plugins: {
+                legend: { labels: { color: '#e2e4eb', usePointStyle: true, pointStyle: 'circle' } },
+                tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: £${ctx.parsed.y.toFixed(2)}` } }
+            }
+        }
+    });
+}
+
+function renderWaterfallChart(credits, debits) {
+    const totalIncome = credits.reduce((s,t) => s + t.amount, 0);
+    // Build category breakdown
+    const catTotals = {};
+    debits.forEach(t => {
+        const cat = t.category || 'Other';
+        catTotals[cat] = (catTotals[cat] || 0) + Math.abs(t.amount);
+    });
+    const sorted = Object.entries(catTotals).sort((a,b) => b[1] - a[1]);
+    const totalSpent = sorted.reduce((s,[,v]) => s + v, 0);
+    const net = totalIncome - totalSpent;
+
+    const labels = ['Income', ...sorted.map(([k]) => k), 'Net'];
+    const data = [];
+    const colors = [];
+    let running = 0;
+
+    // Income bar
+    data.push([0, totalIncome]);
+    colors.push('rgba(0,184,148,0.8)');
+    running = totalIncome;
+
+    // Category bars (waterfall down)
+    sorted.forEach(([cat, val]) => {
+        data.push([running - val, running]);
+        colors.push(getCatColor(cat) + 'cc');
+        running -= val;
+    });
+
+    // Net bar
+    data.push([0, net]);
+    colors.push(net >= 0 ? 'rgba(0,184,148,0.8)' : 'rgba(225,112,85,0.8)');
+
+    if (waterfallChart) waterfallChart.destroy();
+    waterfallChart = new Chart(document.getElementById('waterfallChart'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                data: data.map(d => d[1] - d[0]),
+                backgroundColor: colors,
+                borderRadius: 4,
+                barPercentage: 0.7
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const idx = ctx.dataIndex;
+                            if (idx === 0) return ` Income: £${totalIncome.toFixed(2)}`;
+                            if (idx === labels.length - 1) return ` Net: £${net.toFixed(2)}`;
+                            return ` ${labels[idx]}: -£${sorted[idx-1][1].toFixed(2)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 }, maxRotation: 45 } },
+                y: { grid: { color: '#2e3347' }, ticks: { color: '#8b8fa3', callback: v => '£' + v.toLocaleString() } }
+            }
+        }
+    });
+}
+
+function getCatColor(cat) {
+    if (typeof CAT_COLORS !== 'undefined' && CAT_COLORS[cat]) return CAT_COLORS[cat];
+    if (store.settings.customCategories && store.settings.customCategories[cat]) return store.settings.customCategories[cat].color;
+    return '#636e72';
+}
+
+function renderCatCompareChart() {
+    const txs = getFilteredTransactions().filter(t => t.amount < 0 && t.date);
+    const catMonths = {};
+    txs.forEach(t => {
+        const cat = t.category || 'Other';
+        const m = t.date.substring(0, 7);
+        if (!catMonths[cat]) catMonths[cat] = {};
+        catMonths[cat][m] = (catMonths[cat][m] || 0) + Math.abs(t.amount);
+    });
+
+    const months = [...new Set(txs.map(t => t.date.substring(0, 7)))].sort();
+    // Top 6 categories by total spend
+    const topCats = Object.entries(catMonths)
+        .map(([cat, data]) => [cat, Object.values(data).reduce((a,b) => a+b, 0)])
+        .sort((a,b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(([cat]) => cat);
+
+    const datasets = topCats.map(cat => ({
+        label: cat,
+        data: months.map(m => catMonths[cat]?.[m] || 0),
+        backgroundColor: getCatColor(cat) + '99',
+        borderRadius: 3,
+        barPercentage: 0.8
+    }));
+
+    if (catCompareChart) catCompareChart.destroy();
+    catCompareChart = new Chart(document.getElementById('catCompareChart'), {
+        type: 'bar',
+        data: { labels: months.map(formatMonth), datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: '#e2e4eb', usePointStyle: true, pointStyle: 'circle', font: { size: 10 } } },
+                tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: £${ctx.parsed.y.toFixed(2)}` } }
+            },
+            scales: {
+                x: { stacked: true, grid: { display: false }, ticks: { color: '#8b8fa3', font: { size: 10 } } },
+                y: { stacked: true, grid: { color: '#2e3347' }, ticks: { color: '#8b8fa3', callback: v => '£' + v } }
+            }
+        }
+    });
+}
+
 // ===================== TOP SPENDING =====================
 function renderTopSpending(debits) {
     // Group by merchant (simplified description)
@@ -2500,22 +2946,16 @@ function updateCategory(id, newCat) {
     }
 
     const merchantName = getMerchantName(tx.description);
-    // Find all transactions with the same merchant name
+    // Auto-apply to ALL transactions with the same merchant name
     const matching = store.transactions.filter(t =>
-        t.id !== id && getMerchantName(t.description) === merchantName && t.category !== newCat
+        getMerchantName(t.description) === merchantName
     );
 
-    tx.category = newCat;
-    const updatedIds = [id];
+    const updatedIds = [];
+    matching.forEach(t => { t.category = newCat; updatedIds.push(t.id); });
 
-    if (matching.length > 0) {
-        const applyAll = confirm(
-            `Apply "${newCat}" to all ${matching.length + 1} transactions from "${merchantName}"?\n\nClick OK to update all, or Cancel to update just this one.`
-        );
-        if (applyAll) {
-            matching.forEach(t => { t.category = newCat; updatedIds.push(t.id); });
-            showToast(`Updated ${matching.length + 1} transactions from ${merchantName} to ${newCat}`, 'success');
-        }
+    if (matching.length > 1) {
+        showToast(`Updated ${matching.length} "${merchantName}" transactions → ${newCat}`, 'success');
     }
 
     saveStore();
@@ -2537,11 +2977,13 @@ function renderAllAccountsOverview() {
     el.style.display = 'block';
 
     const accounts = ['person1', 'person2', 'joint'];
-    const month = document.getElementById('monthFilter').value;
 
     document.getElementById('accountBreakdownGrid').innerHTML = accounts.map(acc => {
-        let txs = store.transactions.filter(t => t.account === acc);
-        if (month !== 'all') txs = txs.filter(t => t.date && t.date.substring(0, 7) === month);
+        // Use the active filter to get account-specific filtered transactions
+        const saved = currentAccount;
+        currentAccount = acc;
+        let txs = getFilteredTransactions();
+        currentAccount = saved;
 
         const spent = txs.filter(t => t.amount < 0).reduce((s,t) => s + Math.abs(t.amount), 0);
         const income = txs.filter(t => t.amount > 0).reduce((s,t) => s + t.amount, 0);
