@@ -2914,9 +2914,11 @@ function renderWasteItems(debits) {
 function renderTransactions() {
   try {
     const txs = getFilteredTransactions();
-    const search = document.getElementById('txSearch').value.toLowerCase();
+    const searchEl = document.getElementById('txSearch');
+    const search = searchEl ? searchEl.value.toLowerCase() : '';
     const catFilter = document.getElementById('txCatFilter').value;
     const typeFilter = document.getElementById('txTypeFilter').value;
+    if (search) console.log(`[TX] Search: "${search}", pre-filter: ${txs.length}`);
 
     // Update category filter options
     const cats = [...new Set(txs.map(t => t.category))].sort();
@@ -2926,7 +2928,10 @@ function renderTransactions() {
         cats.map(c => `<option value="${c}"${c===curCat?' selected':''}>${c}</option>`).join('');
 
     let filtered = txs;
-    if (search) filtered = filtered.filter(t => (t.description || '').toLowerCase().includes(search));
+    if (search) {
+        filtered = filtered.filter(t => (t.description || '').toLowerCase().includes(search));
+        console.log(`[TX] Post-filter: ${filtered.length} matches`);
+    }
     if (catFilter !== 'all') filtered = filtered.filter(t => t.category === catFilter);
     if (typeFilter === 'debit') filtered = filtered.filter(t => t.amount < 0);
     if (typeFilter === 'credit') filtered = filtered.filter(t => t.amount > 0);
