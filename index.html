@@ -2963,9 +2963,19 @@ function updateCategory(id, newCat) {
     const updatedIds = [];
     matching.forEach(t => { t.category = newCat; updatedIds.push(t.id); });
 
-    if (matching.length > 1) {
-        showToast(`Updated ${matching.length} "${merchantName}" transactions → ${newCat}`, 'success');
+    // Save as a category rule so future uploads auto-categorize
+    if (!store.settings.customRules) store.settings.customRules = {};
+    if (!store.settings.customRules[newCat]) store.settings.customRules[newCat] = [];
+    const ruleKeyword = merchantName.toLowerCase();
+    if (!store.settings.customRules[newCat].includes(ruleKeyword)) {
+        // Remove from any other category rule first
+        Object.keys(store.settings.customRules).forEach(cat => {
+            store.settings.customRules[cat] = store.settings.customRules[cat].filter(kw => kw !== ruleKeyword);
+        });
+        store.settings.customRules[newCat].push(ruleKeyword);
     }
+
+    showToast(`Updated ${matching.length} "${merchantName}" transaction${matching.length > 1 ? 's' : ''} → ${newCat}`, 'success');
 
     saveStore();
     renderDashboard();
@@ -2973,6 +2983,14 @@ function updateCategory(id, newCat) {
     // Sync to sheet
     if (getApiUrl()) {
         apiCall('bulkUpdateCategory', { ids: updatedIds, category: newCat, merchantName });
+        apiCall('saveSettings', {
+            settings: {
+                name1: store.settings.name1,
+                name2: store.settings.name2,
+                nameJoint: store.settings.nameJoint,
+                customRules: store.settings.customRules
+            }
+        });
     }
 }
 
