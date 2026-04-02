@@ -1188,22 +1188,37 @@ async function deriveKey(pin, salt) {
     );
 }
 
+// Convert Uint8Array to base64 without stack overflow
+function uint8ToB64(bytes) {
+    let binary = '';
+    const chunk = 8192;
+    for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+}
+
+// Convert base64 to Uint8Array
+function b64ToUint8(b64) {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+}
+
 // Encrypt string with AES-GCM
 async function encryptData(plaintext, key) {
     const enc = new TextEncoder();
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
-    // Store as iv:ciphertext (both base64)
-    const ivB64 = btoa(String.fromCharCode(...iv));
-    const ctB64 = btoa(String.fromCharCode(...new Uint8Array(ciphertext)));
-    return ivB64 + ':' + ctB64;
+    return uint8ToB64(iv) + ':' + uint8ToB64(new Uint8Array(ciphertext));
 }
 
 // Decrypt string with AES-GCM
 async function decryptData(stored, key) {
     const [ivB64, ctB64] = stored.split(':');
-    const iv = new Uint8Array(atob(ivB64).split('').map(c => c.charCodeAt(0)));
-    const ct = new Uint8Array(atob(ctB64).split('').map(c => c.charCodeAt(0)));
+    const iv = b64ToUint8(ivB64);
+    const ct = b64ToUint8(ctB64);
     const plainBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
     return new TextDecoder().decode(plainBuf);
 }
@@ -2378,7 +2393,7 @@ let drilldownCategory = null;
 let drilldownMerchant = null;
 
 function getMerchantName(desc) {
-    // Extract a clean merchant name from Lloyds description
+    if (!desc || typeof desc !== 'string') return desc || 'Unknown';
     let name = desc
         .replace(/^(CD|BGC|DDR|FPO|FPI|BP|STO|DEB|CPT|DD|SO|TFR|CR|DR)\s+/i, '')
         .replace(/\b\d{2}\/\d{2}\/?\d{0,4}\b/g, '')  // dates
@@ -2510,7 +2525,7 @@ function drilldownToMerchant(merchantName, category) {
     html += sorted.map(t => `
         <div class="drilldown-tx-item">
             <span style="min-width:80px">${formatDate(t.date)}</span>
-            <span class="drilldown-tx-desc" title="${escapeHtml(t.description)}">${t.description}</span>
+            <span class="drilldown-tx-desc" title="${escapeHtml(t.description || '')}">${t.description || ''}</span>
             <span class="amount-debit" style="font-weight:600">-£${Math.abs(t.amount).toFixed(2)}</span>
         </div>
     `).join('');
@@ -2830,7 +2845,7 @@ function renderTopSpending(debits) {
 }
 
 function simplifyMerchant(desc) {
-    // Remove card numbers, dates, refs
+    if (!desc || typeof desc !== 'string') return desc || '';
     return desc.replace(/\b\d{4,}\b/g, '').replace(/\b\d{2}\/\d{2}\b/g, '')
                .replace(/\bCD\b|\bBGC\b|\bDDR\b|\bFPO\b|\bFPI\b|\bBP\b|\bSTO\b/g, '')
                .replace(/\s+/g, ' ').trim().substring(0, 35);
@@ -3151,7 +3166,7 @@ function saveSettings() {
 
     // Re-categorize all transactions with new rules
     store.transactions.forEach(t => {
-        t.category = categorize(t.description);
+        t.category = categorize(t.description || '');
     });
 
     saveStore();
@@ -3277,7 +3292,7 @@ function removeCustomCategory(name) {
     }
     // Re-categorize transactions that were in this category
     store.transactions.forEach(t => {
-        if (t.category === name) t.category = categorize(t.description);
+        if (t.category === name) t.category = categorize(t.description || '');
     });
     saveStore();
     renderCustomCatList();
