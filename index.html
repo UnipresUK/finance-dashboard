@@ -1821,20 +1821,133 @@ function saveStore() {
 }
 
 // ===================== CATEGORIES =====================
-const DEFAULT_CATEGORIES = {
-    'Groceries': { color: '#00b894', keywords: ['tesco','sainsbury','asda','aldi','lidl','morrisons','co-op','coop','waitrose','m&s food','marks & spencer','iceland','ocado','grocery','supermarket'] },
-    'Eating Out': { color: '#fd79a8', keywords: ['mcdonald','burger king','kfc','nando','pizza','greggs','costa','starbucks','cafe','coffee','restaurant','just eat','deliveroo','uber eats','domino','subway','pret','five guys','wagamama','zizzi','dining'] },
-    'Transport': { color: '#74b9ff', keywords: ['fuel','petrol','diesel','bp ','shell ','esso','texaco','parking','ncp','train','rail','bus','tfl','uber','taxi','mot ','car wash','halfords','kwik fit','national express'] },
-    'Bills & Utilities': { color: '#a29bfe', keywords: ['electric','gas','water','council tax','tv licence','broadband','internet','virgin media','bt ','sky ','ee ','vodafone','o2 ','three ','giffgaff','plusnet','insurance','rent','mortgage','phone'] },
-    'Shopping': { color: '#fdcb6e', keywords: ['amazon','ebay','argos','john lewis','next','primark','h&m','zara','asos','boohoo','currys','ikea','tkmaxx','sports direct','jd sports','nike','adidas'] },
-    'Subscriptions': { color: '#00cec9', keywords: ['netflix','spotify','disney','apple.com','amazon prime','youtube','audible','gym','membership','subscription','adobe','microsoft','playstation','xbox','nintendo','now tv'] },
-    'Health & Beauty': { color: '#e17055', keywords: ['boots','superdrug','pharmacy','dentist','doctor','optician','specsavers','haircut','barber','salon','spa','nhs'] },
-    'Entertainment': { color: '#fab1a0', keywords: ['cinema','odeon','cineworld','vue','theatre','concert','ticket','bowling','golf','betting','lottery','pub','bar','nightclub','wetherspoon'] },
-    'Transfers': { color: '#636e72', keywords: ['transfer','tfr','standing order','direct debit setup'] },
-    'Cash': { color: '#b2bec3', keywords: ['cash','atm','withdrawal','cashpoint'] },
-    'Income': { color: '#00b894', keywords: ['salary','wages','pay','hmrc','tax refund','dividend','interest','refund'] },
-    'Other': { color: '#dfe6e9', keywords: [] }
+// Parent/sub-category hierarchy with emojis
+const CATEGORY_TREE = {
+    'Groceries':        { emoji: '🛒', color: '#00b894', children: {
+        'Supermarket':      { emoji: '🏪', keywords: ['tesco','sainsbury','asda','aldi','lidl','morrisons','co-op','coop','waitrose','m&s food','marks & spencer','iceland','ocado','grocery','supermarket','premier'] },
+        'Groceries Other':  { emoji: '🛒', keywords: [] }
+    }},
+    'Eating Out':       { emoji: '🍽️', color: '#fd79a8', children: {
+        'Fast Food':        { emoji: '🍔', keywords: ['mcdonald','burger king','kfc','subway','greggs','five guys','domino','pizza hut'] },
+        'Restaurants':      { emoji: '🍷', keywords: ['restaurant','nando','wagamama','zizzi','dining','harvester','toby carvery','beefeater'] },
+        'Coffee & Cafe':    { emoji: '☕', keywords: ['costa','starbucks','cafe','coffee','pret','caffe nero'] },
+        'Takeaway':         { emoji: '🥡', keywords: ['just eat','deliveroo','uber eats','pizza','chinese','indian','kebab','chippy'] }
+    }},
+    'Transport':        { emoji: '🚗', color: '#74b9ff', children: {
+        'Fuel':             { emoji: '⛽', keywords: ['fuel','petrol','diesel','bp ','shell ','esso','texaco'] },
+        'Car Payment':      { emoji: '🚘', keywords: ['leasys','pcp','car finance','car lease','hp '] },
+        'Parking':          { emoji: '🅿️', keywords: ['parking','ncp','ringgo','paybyphone','justpark'] },
+        'Public Transport': { emoji: '🚌', keywords: ['train','rail','bus','tfl','metro','national express'] },
+        'Taxi':             { emoji: '🚕', keywords: ['uber','taxi','bolt','cab'] },
+        'Car Maintenance':  { emoji: '🔧', keywords: ['mot ','car wash','halfords','kwik fit','ats ','service','garage'] }
+    }},
+    'Bills':            { emoji: '🏠', color: '#a29bfe', children: {
+        'Rent/Mortgage':    { emoji: '🏡', keywords: ['rent','mortgage','persimmon','housing','landlord'] },
+        'Energy':           { emoji: '💡', keywords: ['electric','gas','water','edf','british gas','eon','octopus energy','sse'] },
+        'Council Tax':      { emoji: '🏛️', keywords: ['council tax','sunderland cc','council'] },
+        'Insurance':        { emoji: '🛡️', keywords: ['insurance','admiral','aviva','direct line','compare the market'] },
+        'Phone & Internet': { emoji: '📱', keywords: ['broadband','internet','virgin media','bt ','sky ','ee ','vodafone','o2 ','three ','giffgaff','plusnet','id mobile','phone'] },
+        'TV Licence':       { emoji: '📺', keywords: ['tv licence'] }
+    }},
+    'Subscriptions':    { emoji: '🔄', color: '#00cec9', children: {
+        'Streaming':        { emoji: '📺', keywords: ['netflix','spotify','disney','apple.com','amazon prime','youtube','now tv','dazn','crunchyroll'] },
+        'Gaming':           { emoji: '🎮', keywords: ['playstation','xbox','nintendo','steam','epic games'] },
+        'Software':         { emoji: '💻', keywords: ['adobe','microsoft','google','icloud','dropbox'] },
+        'Memberships':      { emoji: '🏋️', keywords: ['gym','membership','subscription','audible','mastery'] }
+    }},
+    'Shopping':         { emoji: '🛍️', color: '#fdcb6e', children: {
+        'Online Shopping':  { emoji: '📦', keywords: ['amazon','ebay','asos','boohoo'] },
+        'Clothing':         { emoji: '👕', keywords: ['next','primark','h&m','zara','tkmaxx','sports direct','jd sports','nike','adidas'] },
+        'Home & Garden':    { emoji: '🏡', keywords: ['ikea','argos','john lewis','currys','b&q','homebase','dunelm','wilko'] },
+        'Gifts':            { emoji: '🎁', keywords: ['birthdays','gift','present','card factory','moonpig'] }
+    }},
+    'Entertainment':    { emoji: '🎉', color: '#fab1a0', children: {
+        'Days Out':         { emoji: '🎡', keywords: ['cinema','odeon','cineworld','vue','theatre','concert','ticket','bowling','golf','zoo','museum','theme park'] },
+        'Drinks & Nightlife': { emoji: '🍻', keywords: ['pub','bar','nightclub','wetherspoon','club'] },
+        'Gambling':         { emoji: '🎰', keywords: ['betting','lottery','bet365','paddy','william hill','coral'] }
+    }},
+    'Health & Beauty':  { emoji: '💊', color: '#e17055', children: {
+        'Medical':          { emoji: '🏥', keywords: ['pharmacy','dentist','doctor','optician','specsavers','nhs','hospital'] },
+        'Beauty':           { emoji: '💅', keywords: ['boots','superdrug','haircut','barber','salon','spa'] }
+    }},
+    'Children':         { emoji: '👶', color: '#55efc4', children: {
+        'Childcare':        { emoji: '🧒', keywords: ['nursery','childcare','childminder','school','breakfast club','after school'] },
+        'Kids Activities':  { emoji: '🎨', keywords: ['soft play','swimming lesson','kids','children'] },
+        'Kids Shopping':    { emoji: '🧸', keywords: ['smyths','toy','kids clothes','school uniform'] }
+    }},
+    'Savings':          { emoji: '🐷', color: '#ffeaa7', children: {
+        'Emergency Fund':   { emoji: '🆘', keywords: ['emergency account','emergency fund','emergency'] },
+        'ISA':              { emoji: '📈', keywords: ['isa','ns&i','premium bond','savings','investment'] },
+        'General Savings':  { emoji: '💰', keywords: ['savings pot','save','rainy day'] }
+    }},
+    'Debt':             { emoji: '💳', color: '#d63031', children: {
+        'Credit Card':      { emoji: '💳', keywords: ['credit card','barclaycard','amex','capital one','mastercard','visa'] },
+        'Loans':            { emoji: '📋', keywords: ['loan','finance','repayment'] }
+    }},
+    'Transfers':        { emoji: '🔀', color: '#636e72', children: {} },
+    'Cash':             { emoji: '💵', color: '#b2bec3', children: {} },
+    'Income':           { emoji: '💚', color: '#00b894', children: {} },
+    'Other':            { emoji: '📌', color: '#dfe6e9', children: {} }
 };
+
+// Build flat categories from tree (for backwards compatibility)
+function buildFlatCategories() {
+    const flat = {};
+    for (const [parent, info] of Object.entries(CATEGORY_TREE)) {
+        const childKeys = Object.keys(info.children || {});
+        if (childKeys.length === 0) {
+            // Leaf-only parent — use parent keywords directly
+            flat[parent] = { color: info.color, keywords: info.keywords || [], emoji: info.emoji, parent: null };
+        } else {
+            // Parent with children — parent has no keywords, children do
+            flat[parent] = { color: info.color, keywords: [], emoji: info.emoji, parent: null };
+            for (const [child, childInfo] of Object.entries(info.children)) {
+                flat[child] = { color: info.color, keywords: childInfo.keywords || [], emoji: childInfo.emoji, parent: parent };
+            }
+        }
+    }
+    // Add direct keyword parents for Transfers, Cash, Income
+    flat['Transfers'].keywords = ['transfer','tfr','standing order','direct debit setup'];
+    flat['Cash'].keywords = ['cash','atm','withdrawal','cashpoint'];
+    flat['Income'].keywords = ['salary','wages','pay','hmrc','tax refund','dividend','interest','refund'];
+    return flat;
+}
+
+const DEFAULT_CATEGORIES = buildFlatCategories();
+
+// Helper: get parent category for a given category name
+function getParentCategory(cat) {
+    const all = getAllCategories();
+    const info = all[cat];
+    return info && info.parent ? info.parent : cat;
+}
+
+// Helper: get children of a parent category
+function getChildCategories(parent) {
+    const all = getAllCategories();
+    return Object.entries(all).filter(([_, info]) => info.parent === parent).map(([name]) => name);
+}
+
+// Helper: get emoji for category
+function getCatEmoji(cat) {
+    const all = getAllCategories();
+    return (all[cat] && all[cat].emoji) || '📌';
+}
+
+// Helper: aggregate spending by parent categories
+function aggregateByParent(catTotals) {
+    const parentTotals = {};
+    for (const [cat, amount] of Object.entries(catTotals)) {
+        const parent = getParentCategory(cat);
+        parentTotals[parent] = (parentTotals[parent] || 0) + amount;
+    }
+    return parentTotals;
+}
+
+// Helper: is this a parent-level category?
+function isParentCategory(cat) {
+    return CATEGORY_TREE.hasOwnProperty(cat);
+}
 
 const CUSTOM_CAT_COLORS = ['#e84393','#0984e3','#6c5ce7','#00b894','#fdcb6e','#e17055','#00cec9','#fab1a0','#74b9ff','#a29bfe','#55efc4','#ffeaa7','#dfe6e9','#b2bec3','#fd79a8','#636e72'];
 
@@ -2340,6 +2453,8 @@ function formatMonth(ym) {
 }
 
 // ===================== CATEGORY CHART =====================
+let chartViewLevel = 'parent'; // 'parent' or specific parent name for sub-view
+
 function renderCategoryChart(debits) {
     const catTotals = {};
     debits.forEach(t => {
@@ -2347,16 +2462,56 @@ function renderCategoryChart(debits) {
         catTotals[cat] = (catTotals[cat] || 0) + Math.abs(t.amount);
     });
 
-    const sorted = Object.entries(catTotals).sort((a,b) => b[1] - a[1]);
-    const labels = sorted.map(([k]) => k);
-    const data = sorted.map(([,v]) => v);
-    const colors = labels.map(l => CAT_COLORS[l] || '#636e72');
+    let labels, data, colors, chartLabels;
+
+    if (chartViewLevel === 'parent') {
+        // Aggregate to parent level
+        const parentTotals = aggregateByParent(catTotals);
+        const sorted = Object.entries(parentTotals).sort((a,b) => b[1] - a[1]);
+        labels = sorted.map(([k]) => k);
+        data = sorted.map(([,v]) => v);
+        colors = labels.map(l => {
+            const tree = CATEGORY_TREE[l];
+            return tree ? tree.color : (CAT_COLORS[l] || '#636e72');
+        });
+        chartLabels = labels.map(l => `${getCatEmoji(l)} ${l}`);
+    } else {
+        // Show sub-categories for a specific parent
+        const children = getChildCategories(chartViewLevel);
+        const relevantCats = children.length > 0 ? children : [chartViewLevel];
+        const filtered = {};
+        relevantCats.forEach(c => { if (catTotals[c]) filtered[c] = catTotals[c]; });
+        const sorted = Object.entries(filtered).sort((a,b) => b[1] - a[1]);
+        labels = sorted.map(([k]) => k);
+        data = sorted.map(([,v]) => v);
+        colors = labels.map(l => {
+            const all = getAllCategories();
+            return (all[l] && all[l].color) || CAT_COLORS[l] || '#636e72';
+        });
+        chartLabels = labels.map(l => `${getCatEmoji(l)} ${l}`);
+    }
+
+    // Show back button when drilling into sub-categories
+    let backBtn = document.getElementById('chartBackBtn');
+    if (!backBtn) {
+        backBtn = document.createElement('button');
+        backBtn.id = 'chartBackBtn';
+        backBtn.className = 'btn btn-secondary';
+        backBtn.style.cssText = 'font-size:0.75rem;margin-bottom:8px;display:none;';
+        backBtn.textContent = '← Back to all categories';
+        backBtn.onclick = () => { chartViewLevel = 'parent'; renderDashboard(); };
+        document.getElementById('categoryChart').parentElement.prepend(backBtn);
+    }
+    backBtn.style.display = chartViewLevel === 'parent' ? 'none' : 'inline-block';
+    if (chartViewLevel !== 'parent') {
+        backBtn.textContent = `← Back from ${getCatEmoji(chartViewLevel)} ${chartViewLevel}`;
+    }
 
     if (categoryChart) categoryChart.destroy();
     categoryChart = new Chart(document.getElementById('categoryChart'), {
         type: 'doughnut',
         data: {
-            labels: labels,
+            labels: chartLabels,
             datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }]
         },
         options: {
@@ -2365,7 +2520,18 @@ function renderCategoryChart(debits) {
             onClick: (event, elements) => {
                 if (elements.length > 0) {
                     const idx = elements[0].index;
-                    openCategoryDrilldown(labels[idx]);
+                    const clickedCat = labels[idx];
+                    if (chartViewLevel === 'parent') {
+                        const children = getChildCategories(clickedCat);
+                        if (children.length > 0) {
+                            chartViewLevel = clickedCat;
+                            renderDashboard();
+                        } else {
+                            openCategoryDrilldown(clickedCat);
+                        }
+                    } else {
+                        openCategoryDrilldown(clickedCat);
+                    }
                 }
             },
             plugins: {
@@ -2373,18 +2539,35 @@ function renderCategoryChart(debits) {
                     position: window.innerWidth < 600 ? 'bottom' : 'right',
                     labels: { color: '#e2e4eb', font: { size: 11 }, padding: 8, usePointStyle: true, pointStyle: 'circle' },
                     onClick: (e, legendItem, legend) => {
-                        openCategoryDrilldown(legendItem.text);
+                        const idx = legendItem.index;
+                        const clickedCat = labels[idx];
+                        if (chartViewLevel === 'parent') {
+                            const children = getChildCategories(clickedCat);
+                            if (children.length > 0) {
+                                chartViewLevel = clickedCat;
+                                renderDashboard();
+                            } else {
+                                openCategoryDrilldown(clickedCat);
+                            }
+                        } else {
+                            openCategoryDrilldown(clickedCat);
+                        }
                     }
                 },
                 tooltip: {
                     callbacks: {
-                        label: (ctx) => ` ${ctx.label}: £${ctx.parsed.toFixed(2)} (${((ctx.parsed/data.reduce((a,b)=>a+b,0))*100).toFixed(1)}%) — Click to drill down`
+                        label: (ctx) => {
+                            const total = data.reduce((a,b)=>a+b,0);
+                            const pct = ((ctx.parsed/total)*100).toFixed(1);
+                            const clickHint = chartViewLevel === 'parent' && getChildCategories(labels[ctx.dataIndex]).length > 0
+                                ? ' — Click to see breakdown' : ' — Click for details';
+                            return ` ${ctx.label}: £${ctx.parsed.toFixed(2)} (${pct}%)${clickHint}`;
+                        }
                     }
                 }
             }
         }
     });
-    // Make canvas show pointer on hoverable segments
     document.getElementById('categoryChart').style.cursor = 'pointer';
 }
 
@@ -2412,14 +2595,18 @@ function openCategoryDrilldown(category) {
     drilldownCategory = category;
     drilldownMerchant = null;
 
-    const txs = getFilteredTransactions().filter(t => t.category === category && t.amount < 0);
+    // If it's a parent category, include all children
+    const children = getChildCategories(category);
+    const matchCats = children.length > 0 ? [category, ...children] : [category];
+    const txs = getFilteredTransactions().filter(t => matchCats.includes(t.category) && t.amount < 0);
     const totalSpent = txs.reduce((s, t) => s + Math.abs(t.amount), 0);
     const budgets = store.budgets || {};
     const budget = budgets[category] || 0;
 
-    // Set header
-    document.getElementById('drilldownDot').style.background = CAT_COLORS[category] || '#636e72';
-    document.getElementById('drilldownName').textContent = category;
+    // Set header with emoji
+    const catColor = CAT_COLORS[category] || (CATEGORY_TREE[category] && CATEGORY_TREE[category].color) || '#636e72';
+    document.getElementById('drilldownDot').style.background = catColor;
+    document.getElementById('drilldownName').textContent = `${getCatEmoji(category)} ${category}`;
     document.getElementById('drilldownBack').style.display = 'none';
 
     // Stats
@@ -2463,7 +2650,34 @@ function openCategoryDrilldown(category) {
     const sorted = Object.entries(merchants).sort((a, b) => b[1].total - a[1].total);
     const maxTotal = sorted.length > 0 ? sorted[0][1].total : 1;
 
-    let html = '<div class="merchant-breakdown"><h3>Breakdown by Merchant / Payee</h3>';
+    // If parent category with children, show sub-category breakdown first
+    let html = '';
+    if (children.length > 0) {
+        const subTotals = {};
+        txs.forEach(t => {
+            const sub = t.category || 'Other';
+            subTotals[sub] = (subTotals[sub] || 0) + Math.abs(t.amount);
+        });
+        const subSorted = Object.entries(subTotals).sort((a,b) => b[1] - a[1]);
+        html += '<div class="merchant-breakdown"><h3>Sub-category Breakdown</h3>';
+        html += subSorted.map(([sub, total]) => {
+            const pct = (total / totalSpent) * 100;
+            return `<div class="merchant-row" onclick="openCategoryDrilldown('${escapeHtml(sub)}')">
+                <div class="merchant-bar-container">
+                    <div class="merchant-name">${getCatEmoji(sub)} ${sub}</div>
+                    <div class="merchant-bar-bg">
+                        <div class="merchant-bar-fill" style="width:${pct}%;background:${catColor}"></div>
+                    </div>
+                </div>
+                <div class="merchant-info">
+                    <div class="amt">£${total.toFixed(2)} <span style="font-size:0.7rem;color:var(--text-dim)">(${pct.toFixed(1)}%)</span></div>
+                </div>
+            </div>`;
+        }).join('');
+        html += '</div>';
+    }
+
+    html += '<div class="merchant-breakdown"><h3>Breakdown by Merchant / Payee</h3>';
     html += sorted.map(([name, data]) => {
         const pct = (data.total / maxTotal) * 100;
         const pctOfCat = ((data.total / totalSpent) * 100).toFixed(1);
@@ -2559,40 +2773,73 @@ function renderBudgetBars(debits) {
     });
 
     const budgets = store.budgets || {};
-    const cats = Object.keys(CATEGORIES).filter(c => c !== 'Income' && c !== 'Transfers');
+    // Show parent-level totals with expandable children
+    const parentTotals = aggregateByParent(catTotals);
 
-    const html = cats.map(cat => {
-        const spent = catTotals[cat] || 0;
-        const budget = budgets[cat] || 0;
+    const html = Object.entries(CATEGORY_TREE)
+        .filter(([name]) => name !== 'Income' && name !== 'Transfers')
+        .map(([parent, info]) => {
+            const spent = parentTotals[parent] || 0;
+            const budget = budgets[parent] || 0;
+            if (spent === 0 && budget === 0) return '';
 
-        if (spent === 0 && budget === 0) return '';
+            const pct = budget > 0 ? Math.min((spent / budget) * 100, 150) : 0;
+            const barClass = budget === 0 ? 'ok' : pct > 100 ? 'over' : pct > 80 ? 'warn' : 'ok';
+            const overAmount = budget > 0 && spent > budget ? spent - budget : 0;
 
-        const pct = budget > 0 ? Math.min((spent / budget) * 100, 150) : 0;
-        const barClass = budget === 0 ? 'ok' : pct > 100 ? 'over' : pct > 80 ? 'warn' : 'ok';
-        const overAmount = budget > 0 && spent > budget ? spent - budget : 0;
+            // Build children rows
+            const children = getChildCategories(parent);
+            let childHtml = '';
+            if (children.length > 0) {
+                const childRows = children.map(c => {
+                    const cSpent = catTotals[c] || 0;
+                    if (cSpent === 0) return '';
+                    return `<div class="budget-child" onclick="openCategoryDrilldown('${c}')" style="padding:4px 0 4px 20px;display:flex;justify-content:space-between;cursor:pointer;font-size:0.8rem;color:var(--text-dim)">
+                        <span>${getCatEmoji(c)} ${c}</span>
+                        <span>£${cSpent.toFixed(0)}</span>
+                    </div>`;
+                }).filter(Boolean).join('');
+                if (childRows) {
+                    childHtml = `<div class="budget-children" id="budgetChildren_${parent.replace(/[^a-z0-9]/gi,'')}" style="display:none">${childRows}</div>`;
+                }
+            }
 
-        return `
-            <div class="budget-item clickable-cat" onclick="openCategoryDrilldown('${cat}')">
-                <div class="budget-header">
-                    <div class="budget-cat">
-                        <span class="dot" style="background:${CAT_COLORS[cat]}"></span>
-                        ${cat}
+            return `
+                <div class="budget-item">
+                    <div class="budget-header clickable-cat" onclick="toggleBudgetChildren('${parent.replace(/[^a-z0-9]/gi,'')}', '${parent}')" style="cursor:pointer">
+                        <div class="budget-cat">
+                            <span class="dot" style="background:${info.color}"></span>
+                            ${info.emoji} ${parent}
+                            ${children.length > 0 ? '<span style="font-size:0.7rem;color:var(--text-dim);margin-left:4px">▸</span>' : ''}
+                        </div>
+                        <div class="budget-amounts">
+                            <span class="spent">£${spent.toFixed(0)}</span>
+                            ${budget > 0 ? ` / £${budget.toFixed(0)}` : ''}
+                            ${overAmount > 0 ? `<span class="overspend-badge">+£${overAmount.toFixed(0)} over</span>` : ''}
+                        </div>
                     </div>
-                    <div class="budget-amounts">
-                        <span class="spent">£${spent.toFixed(0)}</span>
-                        ${budget > 0 ? ` / £${budget.toFixed(0)}` : ''}
-                        ${overAmount > 0 ? `<span class="overspend-badge">+£${overAmount.toFixed(0)} over</span>` : ''}
-                    </div>
+                    ${budget > 0 ? `
+                    <div class="budget-bar-bg">
+                        <div class="budget-bar-fill ${barClass}" style="width:${Math.min(pct,100)}%"></div>
+                    </div>` : ''}
+                    ${childHtml}
                 </div>
-                ${budget > 0 ? `
-                <div class="budget-bar-bg">
-                    <div class="budget-bar-fill ${barClass}" style="width:${Math.min(pct,100)}%"></div>
-                </div>` : ''}
-            </div>
-        `;
-    }).filter(Boolean).join('');
+            `;
+        }).filter(Boolean).join('');
 
     document.getElementById('budgetBars').innerHTML = html || '<p style="color:var(--text-dim);font-size:0.85rem">No budgets set. Click Edit to add budgets.</p>';
+}
+
+function toggleBudgetChildren(id, parent) {
+    const el = document.getElementById('budgetChildren_' + id);
+    if (!el) {
+        openCategoryDrilldown(parent);
+        return;
+    }
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    // Toggle arrow
+    const arrow = el.parentElement.querySelector('.budget-cat span:last-child');
+    if (arrow) arrow.textContent = el.style.display === 'none' ? '▸' : '▾';
 }
 
 // ===================== TREND CHART =====================
@@ -2860,32 +3107,36 @@ function renderWasteItems(debits) {
         catTotals[cat] = (catTotals[cat] || 0) + Math.abs(t.amount);
     });
 
+    // Use parent-level totals for waste detection
+    const parentTotals = aggregateByParent(catTotals);
     const wasteCats = ['Eating Out', 'Entertainment', 'Subscriptions', 'Shopping'];
     const items = [];
 
     wasteCats.forEach(cat => {
-        const spent = catTotals[cat] || 0;
+        const spent = parentTotals[cat] || 0;
         const budget = budgets[cat] || 0;
         if (spent === 0) return;
 
+        const emoji = CATEGORY_TREE[cat] ? CATEGORY_TREE[cat].emoji : '📌';
         if (budget > 0 && spent > budget) {
             items.push({
                 cat, spent, budget,
                 severity: ((spent - budget) / budget) > 0.3 ? 'high' : 'med',
-                msg: `${cat}: £${(spent - budget).toFixed(0)} over budget`
+                msg: `${emoji} ${cat}: £${(spent - budget).toFixed(0)} over budget`
             });
         } else if (budget === 0 && spent > 100) {
             items.push({
                 cat, spent, budget,
                 severity: spent > 300 ? 'high' : 'med',
-                msg: `${cat}: £${spent.toFixed(0)} — consider setting a budget`
+                msg: `${emoji} ${cat}: £${spent.toFixed(0)} — consider setting a budget`
             });
         }
     });
 
-    // Check for frequent small transactions (coffee, takeaway)
+    // Check for frequent small transactions (coffee, takeaway, fast food)
+    const eatingOutSubs = ['Fast Food', 'Coffee & Cafe', 'Takeaway', 'Eating Out'];
     const smallFrequent = {};
-    debits.filter(t => Math.abs(t.amount) < 15 && ['Eating Out'].includes(t.category))
+    debits.filter(t => Math.abs(t.amount) < 15 && eatingOutSubs.includes(t.category))
         .forEach(t => {
             const key = simplifyMerchant(t.description);
             smallFrequent[key] = (smallFrequent[key] || 0) + Math.abs(t.amount);
@@ -2920,19 +3171,40 @@ function renderTransactions() {
     const typeFilter = document.getElementById('txTypeFilter').value;
     if (search) console.log(`[TX] Search: "${search}", pre-filter: ${txs.length}`);
 
-    // Update category filter options
-    const cats = [...new Set(txs.map(t => t.category))].sort();
+    // Update category filter options — grouped by parent
+    const catsInUse = [...new Set(txs.map(t => t.category))];
     const catSel = document.getElementById('txCatFilter');
     const curCat = catSel.value;
-    catSel.innerHTML = '<option value="all">All Categories</option>' +
-        cats.map(c => `<option value="${c}"${c===curCat?' selected':''}>${c}</option>`).join('');
+    let catFilterHtml = '<option value="all">All Categories</option>';
+    for (const [parent, info] of Object.entries(CATEGORY_TREE)) {
+        const children = getChildCategories(parent);
+        const relevantChildren = children.filter(c => catsInUse.includes(c));
+        const parentInUse = catsInUse.includes(parent);
+        if (!parentInUse && relevantChildren.length === 0) continue;
+        // Parent as group filter
+        catFilterHtml += `<option value="parent:${parent}"${curCat===('parent:'+parent)?' selected':''}>${info.emoji} ${parent} (All)</option>`;
+        if (parentInUse) {
+            catFilterHtml += `<option value="${parent}"${parent===curCat?' selected':''}>&nbsp;&nbsp;${info.emoji} ${parent}</option>`;
+        }
+        relevantChildren.forEach(c => {
+            catFilterHtml += `<option value="${c}"${c===curCat?' selected':''}>&nbsp;&nbsp;${getCatEmoji(c)} ${c}</option>`;
+        });
+    }
+    catSel.innerHTML = catFilterHtml;
 
     let filtered = txs;
     if (search) {
         filtered = filtered.filter(t => String(t.description ?? '').toLowerCase().includes(search));
-        console.log(`[TX] Post-filter: ${filtered.length} matches`);
     }
-    if (catFilter !== 'all') filtered = filtered.filter(t => t.category === catFilter);
+    if (catFilter !== 'all') {
+        if (catFilter.startsWith('parent:')) {
+            const parentName = catFilter.substring(7);
+            const childCats = [parentName, ...getChildCategories(parentName)];
+            filtered = filtered.filter(t => childCats.includes(t.category));
+        } else {
+            filtered = filtered.filter(t => t.category === catFilter);
+        }
+    }
     if (typeFilter === 'debit') filtered = filtered.filter(t => t.amount < 0);
     if (typeFilter === 'credit') filtered = filtered.filter(t => t.amount > 0);
 
@@ -2940,9 +3212,27 @@ function renderTransactions() {
 
     document.getElementById('txCount').textContent = `${filtered.length} of ${txs.length}`;
 
-    const catOptions = Object.keys(CATEGORIES).map(c =>
-        `<option value="${c}">${c}</option>`
-    ).join('');
+    // Build hierarchical category options for per-row dropdown
+    function buildCatOptions(selectedCat) {
+        let html = '';
+        for (const [parent, info] of Object.entries(CATEGORY_TREE)) {
+            const children = getChildCategories(parent);
+            if (children.length === 0) {
+                // Leaf parent (Transfers, Cash, Income, Other)
+                html += `<option value="${parent}"${parent===selectedCat?' selected':''}>${info.emoji} ${parent}</option>`;
+            } else {
+                // Parent with children — show parent as optgroup-style header
+                html += `<option value="${parent}" disabled style="font-weight:bold;color:var(--text-dim)">── ${info.emoji} ${parent} ──</option>`;
+                children.forEach(c => {
+                    html += `<option value="${c}"${c===selectedCat?' selected':''}>&nbsp;${getCatEmoji(c)} ${c}</option>`;
+                });
+            }
+        }
+        html += '<option value="__new__">+ New Category...</option>';
+        return html;
+    }
+
+    const catColor = (cat) => CAT_COLORS[cat] || (getAllCategories()[cat] && getAllCategories()[cat].color) || '#636e72';
 
     document.getElementById('txBody').innerHTML = filtered.slice(0, 200).map(t => `
         <tr>
@@ -2950,11 +3240,8 @@ function renderTransactions() {
             <td title="${t.description || ''}">${(t.description || '').substring(0, 50)}</td>
             <td>
                 <select class="cat-select" onchange="updateCategory('${t.id}', this.value)"
-                    style="background-color:${CAT_COLORS[t.category] || '#636e72'}22; color:${CAT_COLORS[t.category] || '#636e72'}">
-                    ${Object.keys(CATEGORIES).map(c =>
-                        `<option value="${c}"${c===t.category?' selected':''}>${c}</option>`
-                    ).join('')}
-                    <option value="__new__">+ New Category...</option>
+                    style="background-color:${catColor(t.category)}22; color:${catColor(t.category)}">
+                    ${buildCatOptions(t.category)}
                 </select>
             </td>
             <td class="${t.amount < 0 ? 'amount-debit' : 'amount-credit'}">
