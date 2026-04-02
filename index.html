@@ -2912,6 +2912,7 @@ function renderWasteItems(debits) {
 
 // ===================== TRANSACTIONS TABLE =====================
 function renderTransactions() {
+  try {
     const txs = getFilteredTransactions();
     const search = document.getElementById('txSearch').value.toLowerCase();
     const catFilter = document.getElementById('txCatFilter').value;
@@ -2957,6 +2958,9 @@ function renderTransactions() {
             <td style="color:var(--text-dim)">${getAccountName(t.account)}</td>
         </tr>
     `).join('');
+  } catch(err) {
+    console.error('[renderTransactions] Error:', err);
+  }
 }
 
 function formatDate(d) {
