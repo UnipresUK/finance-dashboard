@@ -1661,15 +1661,15 @@ async function syncFromSheet() {
                 const t = {};
                 Object.keys(raw).forEach(k => t[k.toLowerCase()] = raw[k]);
                 return {
-                    id: t.id || t.ID || '',
-                    date: normalizeDate(t.date || t.Date || t['transaction date'] || ''),
-                    type: t.type || t.Type || t['transaction type'] || '',
-                    description: t.description || t.Description || t['transaction description'] || '',
-                    amount: parseFloat(t.amount || t.Amount || 0) || 0,
-                    balance: parseFloat(t.balance || t.Balance || 0) || null,
-                    category: t.category || t.Category || 'Other',
-                    account: t.account || t.Account || '',
-                    hash: t.hash || t.Hash || ''
+                    id: String(t.id ?? ''),
+                    date: normalizeDate(t.date ?? ''),
+                    type: String(t.type ?? ''),
+                    description: String(t.description ?? ''),
+                    amount: parseFloat(t.amount) || 0,
+                    balance: t.balance != null ? parseFloat(t.balance) : null,
+                    category: String(t.category || 'Other'),
+                    account: String(t.account ?? ''),
+                    hash: String(t.hash ?? '')
                 };
             });
 
@@ -2929,7 +2929,7 @@ function renderTransactions() {
 
     let filtered = txs;
     if (search) {
-        filtered = filtered.filter(t => (t.description || '').toLowerCase().includes(search));
+        filtered = filtered.filter(t => String(t.description ?? '').toLowerCase().includes(search));
         console.log(`[TX] Post-filter: ${filtered.length} matches`);
     }
     if (catFilter !== 'all') filtered = filtered.filter(t => t.category === catFilter);
