@@ -2896,7 +2896,7 @@ function renderTransactions() {
         cats.map(c => `<option value="${c}"${c===curCat?' selected':''}>${c}</option>`).join('');
 
     let filtered = txs;
-    if (search) filtered = filtered.filter(t => t.description.toLowerCase().includes(search));
+    if (search) filtered = filtered.filter(t => (t.description || '').toLowerCase().includes(search));
     if (catFilter !== 'all') filtered = filtered.filter(t => t.category === catFilter);
     if (typeFilter === 'debit') filtered = filtered.filter(t => t.amount < 0);
     if (typeFilter === 'credit') filtered = filtered.filter(t => t.amount > 0);
@@ -2978,7 +2978,7 @@ function updateCategory(id, newCat) {
     showToast(`Updated ${matching.length} "${merchantName}" transaction${matching.length > 1 ? 's' : ''} → ${newCat}`, 'success');
 
     saveStore();
-    renderDashboard();
+    try { renderDashboard(); } catch(e) { console.error('Render after category change:', e); renderTransactions(); }
 
     // Sync to sheet
     if (getApiUrl()) {
