@@ -1386,16 +1386,22 @@ function unlockApp() {
         syncFromSheet().then(result => {
             document.querySelectorAll('.toast.info').forEach(t => t.remove());
             if (result === false) {
-                // Only show error if API call actually failed (not a render error)
                 showConnectionError();
             } else {
                 showToast('Connected & synced ✓', 'success');
+                // Always re-render after sync since syncFromSheet's internal render may have failed silently
+                try { renderDashboard(); } catch(e) { console.error('[UNLOCK] Post-sync render:', e); }
             }
         }).catch(err => {
-            // Don't show connection error for render crashes - sync likely succeeded
-            console.error('[UNLOCK] Post-sync error (sync may have succeeded):', err);
+            console.error('[UNLOCK] Post-sync error:', err);
             document.querySelectorAll('.toast.info').forEach(t => t.remove());
-            showToast('Synced (with rendering warnings)', 'success');
+            // Sync may have succeeded and stored data — try rendering
+            try { renderDashboard(); } catch(e) { console.error('[UNLOCK] Fallback render:', e); }
+            if (store.transactions.length > 0) {
+                showToast('Synced (with warnings)', 'success');
+            } else {
+                showConnectionError();
+            }
         });
     }
 }
@@ -1631,21 +1637,29 @@ async function syncFromSheet() {
 
         // Merge transactions from sheet
         if (data.transactions && data.transactions.length > 0) {
+            // Debug: log raw keys and first record
+            const raw0 = data.transactions[0];
+            console.log('[SYNC] Raw keys:', Object.keys(raw0));
+            console.log('[SYNC] Raw[0]:', JSON.stringify(raw0));
+
             const sheetTxs = data.transactions.map(raw => {
                 const t = {};
                 Object.keys(raw).forEach(k => t[k.toLowerCase()] = raw[k]);
                 return {
-                    id: t.id || '',
-                    date: normalizeDate(t.date),
-                    type: t.type || '',
-                    description: t.description || '',
-                    amount: parseFloat(t.amount) || 0,
-                    balance: t.balance ? parseFloat(t.balance) : null,
-                    category: t.category || 'Other',
-                    account: t.account || '',
-                    hash: t.hash || ''
+                    id: t.id || t.ID || '',
+                    date: normalizeDate(t.date || t.Date || t['transaction date'] || ''),
+                    type: t.type || t.Type || t['transaction type'] || '',
+                    description: t.description || t.Description || t['transaction description'] || '',
+                    amount: parseFloat(t.amount || t.Amount || 0) || 0,
+                    balance: parseFloat(t.balance || t.Balance || 0) || null,
+                    category: t.category || t.Category || 'Other',
+                    account: t.account || t.Account || '',
+                    hash: t.hash || t.Hash || ''
                 };
             });
+
+            // Debug: log first mapped record
+            console.log('[SYNC] Mapped[0]:', JSON.stringify(sheetTxs[0]));
 
             const validTxs = sheetTxs.filter(t => t.date && t.date.length >= 10);
             store.transactions = validTxs.length > 0 ? validTxs : sheetTxs;
