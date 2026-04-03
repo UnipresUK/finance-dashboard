@@ -3844,14 +3844,16 @@ function confirmNewCategory() {
 
     showToast(`Created: ${emoji} ${name}${parentName ? ' (under ' + getCatEmoji(parentName) + ' ' + parentName + ')' : ''}`, 'success');
 
-    // Now apply to the pending transaction
-    if (pendingNewCatTxId) {
-        closeNewCatModal();
-        updateCategory(pendingNewCatTxId, name);
+    // Apply to the pending transaction immediately
+    const txId = pendingNewCatTxId;
+    document.getElementById('newCatModal').classList.remove('show');
+    pendingNewCatTxId = null;
+
+    if (txId) {
+        updateCategory(txId, name);
     } else {
-        closeNewCatModal();
         saveStore();
-        renderDashboard();
+        try { renderDashboard(); } catch(e) { console.error(e); }
     }
 }
 
