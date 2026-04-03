@@ -1568,6 +1568,32 @@
     </div>
 </div>
 
+<!-- New Category Modal -->
+<div class="modal-overlay" id="newCatModal" onclick="if(event.target===this)closeNewCatModal()">
+    <div class="modal" style="max-width:400px">
+        <button class="modal-close" onclick="closeNewCatModal()">&times;</button>
+        <h2>Create New Category</h2>
+        <div class="form-group">
+            <label>Category Name</label>
+            <input type="text" id="newCatName" placeholder="e.g. Window Cleaning">
+        </div>
+        <div class="form-group">
+            <label>Nest Under (Parent Category)</label>
+            <select id="newCatParent">
+                <option value="">(None — top-level category)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Emoji (optional)</label>
+            <input type="text" id="newCatEmoji" placeholder="e.g. 🪟" maxlength="4" style="width:60px">
+        </div>
+        <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-outline" onclick="closeNewCatModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="confirmNewCategory()">Create</button>
+        </div>
+    </div>
+</div>
+
 </div><!-- end appWrapper -->
 
 <script>
@@ -3766,22 +3792,78 @@ function formatDate(d) {
     return `${day}/${m}/${y}`;
 }
 
+// ===================== NEW CATEGORY MODAL =====================
+let pendingNewCatTxId = null;
+
+function openNewCatModal() {
+    // Populate parent dropdown with all parent categories from CATEGORY_TREE
+    const select = document.getElementById('newCatParent');
+    select.innerHTML = '<option value="">(None — top-level category)</option>';
+    for (const [parent, info] of Object.entries(CATEGORY_TREE)) {
+        select.innerHTML += `<option value="${parent}">${info.emoji} ${parent}</option>`;
+    }
+    document.getElementById('newCatName').value = '';
+    document.getElementById('newCatEmoji').value = '';
+    document.getElementById('newCatModal').classList.add('show');
+    setTimeout(() => document.getElementById('newCatName').focus(), 100);
+}
+
+function closeNewCatModal() {
+    document.getElementById('newCatModal').classList.remove('show');
+    pendingNewCatTxId = null;
+    renderTransactions();
+}
+
+function confirmNewCategory() {
+    const name = document.getElementById('newCatName').value.trim();
+    const parentName = document.getElementById('newCatParent').value;
+    const emoji = document.getElementById('newCatEmoji').value.trim() || '📌';
+
+    if (!name) { showToast('Please enter a category name', 'error'); return; }
+
+    // Create the custom category
+    if (!store.settings.customCategories) store.settings.customCategories = {};
+    const colorIdx = Object.keys(store.settings.customCategories).length % CUSTOM_CAT_COLORS.length;
+    const parentInfo = parentName ? CATEGORY_TREE[parentName] : null;
+    const color = parentInfo ? parentInfo.color : CUSTOM_CAT_COLORS[colorIdx];
+
+    store.settings.customCategories[name] = {
+        color: color,
+        keywords: [],
+        emoji: emoji,
+        parent: parentName || null
+    };
+
+    // Also add to CATEGORY_TREE dynamically if nested
+    if (parentName && CATEGORY_TREE[parentName]) {
+        if (!CATEGORY_TREE[parentName].children) CATEGORY_TREE[parentName].children = {};
+        CATEGORY_TREE[parentName].children[name] = { emoji: emoji, keywords: [] };
+        // Rebuild flat categories
+        DEFAULT_CATEGORIES[name] = { color: color, keywords: [], emoji: emoji, parent: parentName };
+    }
+
+    showToast(`Created: ${emoji} ${name}${parentName ? ' (under ' + getCatEmoji(parentName) + ' ' + parentName + ')' : ''}`, 'success');
+
+    // Now apply to the pending transaction
+    if (pendingNewCatTxId) {
+        closeNewCatModal();
+        updateCategory(pendingNewCatTxId, name);
+    } else {
+        closeNewCatModal();
+        saveStore();
+        renderDashboard();
+    }
+}
+
 function updateCategory(id, newCat) {
     const tx = store.transactions.find(t => t.id === id);
     if (!tx) return;
 
-    // Handle "new category" option
+    // Handle "new category" option — open modal
     if (newCat === '__new__') {
-        const name = prompt('Enter new category name:');
-        if (!name || !name.trim()) { renderTransactions(); return; }
-        const trimmed = name.trim();
-        if (!CATEGORIES[trimmed]) {
-            if (!store.settings.customCategories) store.settings.customCategories = {};
-            const colorIdx = Object.keys(store.settings.customCategories).length % CUSTOM_CAT_COLORS.length;
-            store.settings.customCategories[trimmed] = { color: CUSTOM_CAT_COLORS[colorIdx], keywords: [] };
-            showToast(`Created category: ${trimmed}`, 'success');
-        }
-        newCat = trimmed;
+        pendingNewCatTxId = id;
+        openNewCatModal();
+        return;
     }
 
     const merchantName = getMerchantName(tx.description);
