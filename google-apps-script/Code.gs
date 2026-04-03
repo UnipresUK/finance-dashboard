@@ -1,5 +1,5 @@
 // ─── Finance Dashboard - Apps Script Backend ────────────────────
-// REV: 2 (2026-04-01) - Date formatting fix
+// REV: 3 (2026-04-03) - Case-insensitive headers, category sync fix
 // ─── Configuration ───────────────────────────────────────────────
 const SPREADSHEET_ID = '1xHqwlTWMthb7U_L1ymMcxyCgpvPzFr3n4zrapqO5o9Y';
 
@@ -8,6 +8,15 @@ function getSheet(name) {
   const sheet = ss.getSheetByName(name);
   if (!sheet) throw new Error('Sheet not found: ' + name);
   return sheet;
+}
+
+// Case-insensitive column lookup
+function findCol(headers, name) {
+  const lower = name.toLowerCase();
+  for (let i = 0; i < headers.length; i++) {
+    if (String(headers[i]).toLowerCase() === lower) return i;
+  }
+  return -1;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -115,7 +124,7 @@ function doAddTransactions(p) {
   const sheet = getSheet('Transactions');
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
-  const hashCol = headers.indexOf('hash');
+  const hashCol = findCol(headers,'hash');
 
   // Collect existing hashes
   const existingHashes = new Set();
@@ -163,11 +172,11 @@ function doUpdateTransaction(p) {
   const sheet = getSheet('Transactions');
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
-  const idCol = headers.indexOf('id');
-  const catCol = headers.indexOf('category');
+  const idCol = findCol(headers,'id');
+  const catCol = findCol(headers,'category');
 
   for (let i = 1; i < data.length; i++) {
-    if (data[i][idCol] === p.id) {
+    if (String(data[i][idCol]) === String(p.id)) {
       if (p.category !== undefined) sheet.getRange(i + 1, catCol + 1).setValue(p.category);
       return ok({ updated: true });
     }
@@ -180,19 +189,18 @@ function doBulkUpdateCategory(p) {
   const sheet = getSheet('Transactions');
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
-  const catCol = headers.indexOf('category');
-  const descCol = headers.indexOf('description');
+  const catCol = findCol(headers,'category');
+  const idCol = findCol(headers,'id');
 
-  // p.merchantName is the simplified merchant name
-  // p.category is the new category
+  if (catCol < 0 || idCol < 0) return fail('Missing Category or ID column in sheet');
+
   // p.ids is an array of transaction IDs to update
   const idSet = new Set(p.ids || []);
   let count = 0;
 
   if (idSet.size > 0) {
-    const idCol = headers.indexOf('id');
     for (let i = 1; i < data.length; i++) {
-      if (idSet.has(data[i][idCol])) {
+      if (idSet.has(String(data[i][idCol]))) {
         sheet.getRange(i + 1, catCol + 1).setValue(p.category);
         count++;
       }
@@ -210,7 +218,7 @@ function doDeleteTransactions(p) {
   const sheet = getSheet('Transactions');
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
-  const idCol = headers.indexOf('id');
+  const idCol = findCol(headers,'id');
   const idSet = new Set(ids);
 
   // Delete from bottom to top to preserve row indices
@@ -249,8 +257,8 @@ function doSaveSettings(p) {
   const settings = p.settings || {};
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
-  const keyCol = headers.indexOf('key');
-  const valCol = headers.indexOf('value');
+  const keyCol = findCol(headers,'key');
+  const valCol = findCol(headers,'value');
 
   // Build a map of existing rows
   const rowMap = {};
@@ -275,13 +283,13 @@ function doSaveCustomCategory(p) {
   const sheet = getSheet('CustomCategories');
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
-  const nameCol = headers.indexOf('name');
+  const nameCol = findCol(headers,'name');
 
   // Check if exists (update)
   for (let i = 1; i < data.length; i++) {
     if (data[i][nameCol] === p.name) {
-      if (p.color !== undefined) sheet.getRange(i + 1, headers.indexOf('color') + 1).setValue(p.color);
-      if (p.keywords !== undefined) sheet.getRange(i + 1, headers.indexOf('keywords') + 1).setValue(p.keywords);
+      if (p.color !== undefined) sheet.getRange(i + 1, findCol(headers,'color') + 1).setValue(p.color);
+      if (p.keywords !== undefined) sheet.getRange(i + 1, findCol(headers,'keywords') + 1).setValue(p.keywords);
       return ok({ updated: true });
     }
   }
@@ -296,7 +304,7 @@ function doDeleteCustomCategory(p) {
   const sheet = getSheet('CustomCategories');
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
-  const nameCol = headers.indexOf('name');
+  const nameCol = findCol(headers,'name');
 
   for (let i = data.length - 1; i >= 1; i--) {
     if (data[i][nameCol] === p.name) {
