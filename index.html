@@ -3300,7 +3300,13 @@ function renderTransactions() {
 
     const catColor = (cat) => CAT_COLORS[cat] || (getAllCategories()[cat] && getAllCategories()[cat].color) || '#636e72';
 
-    document.getElementById('txBody').innerHTML = filtered.slice(0, 200).map(t => `
+    document.getElementById('txBody').innerHTML = filtered.slice(0, 200).map(t => {
+        const parent = getParentCategory(t.category);
+        const isChild = parent !== t.category;
+        const parentLabel = isChild
+            ? `<span style="font-size:0.65rem;color:var(--text-dim);display:block;margin-top:2px">${getCatEmoji(parent)} ${parent}</span>`
+            : '';
+        return `
         <tr>
             <td>${formatDate(t.date)}</td>
             <td title="${t.description || ''}">${(t.description || '').substring(0, 50)}</td>
@@ -3309,13 +3315,14 @@ function renderTransactions() {
                     style="background-color:${catColor(t.category)}22; color:${catColor(t.category)}">
                     ${buildCatOptions(t.category)}
                 </select>
+                ${parentLabel}
             </td>
             <td class="${t.amount < 0 ? 'amount-debit' : 'amount-credit'}">
                 ${t.amount < 0 ? '-' : '+'}£${Math.abs(t.amount).toFixed(2)}
             </td>
             <td style="color:var(--text-dim)">${getAccountName(t.account)}</td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
   } catch(err) {
     console.error('[renderTransactions] Error:', err);
   }
