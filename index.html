@@ -309,6 +309,17 @@
             font-size: 1.2rem;
         }
 
+        .dup-row {
+            display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+            border-radius: 8px; margin-bottom: 4px; background: var(--surface2);
+        }
+        .dup-row:hover { background: var(--border); }
+        .dup-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+        .dup-row .dup-info { flex: 1; font-size: 0.85rem; }
+        .dup-row .dup-date { color: var(--text-dim); min-width: 80px; }
+        .dup-row .dup-desc { color: var(--text); }
+        .dup-row .dup-amt { font-weight: 600; min-width: 70px; text-align: right; }
+
         /* Form elements */
         .form-group { margin-bottom: 14px; }
         .form-group label {
@@ -1594,6 +1605,22 @@
     </div>
 </div>
 
+<!-- Duplicate Review Modal -->
+<div class="modal-overlay" id="dupReviewModal" onclick="if(event.target===this)closeDupReview(false)">
+    <div class="modal" style="max-width:600px;max-height:80vh;overflow-y:auto">
+        <button class="modal-close" onclick="closeDupReview(false)">&times;</button>
+        <h2>Possible Duplicates Found</h2>
+        <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:12px">
+            These transactions already exist. Tick any you want to <strong>keep</strong> (e.g. genuine repeat purchases).
+        </p>
+        <div id="dupReviewList"></div>
+        <div style="margin-top:16px;display:flex;gap:8px;justify-content:space-between;align-items:center">
+            <button class="btn btn-outline" onclick="closeDupReview(false)">Skip All Duplicates</button>
+            <button class="btn btn-primary" onclick="closeDupReview(true)">Keep Selected</button>
+        </div>
+    </div>
+</div>
+
 </div><!-- end appWrapper -->
 
 <script>
@@ -2636,10 +2663,16 @@ function processNextUpload() {
     document.getElementById('accountSelectModal').classList.add('show');
 }
 
+// Pending state for duplicate review
+let dupReviewResolve = null;
+let dupReviewDuplicates = [];
+let dupReviewUnique = [];
+let dupReviewAccount = '';
+
 async function assignUpload(account) {
     if (!pendingUploadData) return;
 
-    // Close modal immediately so UI doesn't feel stuck
+    // Close account-select modal immediately
     document.getElementById('accountSelectModal').classList.remove('show');
 
     const newTxs = pendingUploadData.map(tx => ({
@@ -2651,18 +2684,56 @@ async function assignUpload(account) {
 
     pendingUploadData = null;
 
+    // --- Local duplicate detection ---
+    const existingHashes = new Set(store.transactions.map(t => t.hash || txHash(t)));
+    const unique = [];
+    const duplicates = [];
+    newTxs.forEach(tx => {
+        if (existingHashes.has(tx.hash)) {
+            duplicates.push(tx);
+        } else {
+            unique.push(tx);
+            existingHashes.add(tx.hash); // prevent intra-batch dupes
+        }
+    });
+
+    let toUpload = unique; // start with definite unique transactions
+
+    if (duplicates.length > 0) {
+        if (duplicates.length <= 30) {
+            // Show review modal and wait for user decision
+            const kept = await showDupReviewModal(duplicates);
+            // Give kept duplicates new unique hashes so they don't get deduped
+            kept.forEach(tx => {
+                tx.hash = txHash(tx) + '_' + uid();
+            });
+            toUpload = unique.concat(kept);
+        } else {
+            // Too many to review — auto-skip
+            showToast(`${duplicates.length} duplicate transactions auto-skipped`, 'info');
+        }
+    }
+
+    if (toUpload.length === 0) {
+        showToast('No new transactions to add', 'info');
+        renderDashboard();
+        uploadQueue.shift();
+        processNextUpload();
+        return;
+    }
+
     if (getApiUrl()) {
-        // Online mode: batch upload in chunks of 100 to avoid Apps Script timeout
+        // Online mode: batch upload in chunks of 100
         const BATCH_SIZE = 100;
         let totalAdded = 0;
         let totalSkipped = 0;
-        const totalBatches = Math.ceil(newTxs.length / BATCH_SIZE);
+        const totalBatches = Math.ceil(toUpload.length / BATCH_SIZE);
 
-        showToast(`Uploading ${newTxs.length} transactions to ${getAccountName(account)}... (0/${totalBatches} batches)`, 'info', 60000);
+        showToast(`Uploading ${toUpload.length} transactions to ${getAccountName(account)}...`, 'info', 60000);
 
         let allSucceeded = true;
-        for (let i = 0; i < newTxs.length; i += BATCH_SIZE) {
-            const batch = newTxs.slice(i, i + BATCH_SIZE);
+        for (let i = 0; i < toUpload.length; i += BATCH_SIZE) {
+            const batch = toUpload.slice(i, i + BATCH_SIZE);
             const batchNum = Math.floor(i / BATCH_SIZE) + 1;
             showToast(`Uploading batch ${batchNum}/${totalBatches} (${batch.length} transactions)...`, 'info', 60000);
 
@@ -2672,9 +2743,7 @@ async function assignUpload(account) {
                 totalSkipped += result.skipped;
             } else {
                 allSucceeded = false;
-                // Offline fallback for remaining — add locally
-                const existingHashes = new Set(store.transactions.map(t => t.hash || txHash(t)));
-                const remaining = newTxs.slice(i).filter(t => !existingHashes.has(t.hash));
+                const remaining = toUpload.slice(i).filter(t => !existingHashes.has(t.hash));
                 store.transactions.push(...remaining);
                 saveStore();
                 showToast(`Connection lost. Added ${remaining.length} locally (offline)`, 'warning');
@@ -2683,22 +2752,58 @@ async function assignUpload(account) {
         }
 
         if (allSucceeded) {
-            showToast(`Added ${totalAdded} to ${getAccountName(account)}${totalSkipped ? ` (${totalSkipped} duplicates skipped)` : ''}`, 'success');
-            // Re-sync to get the updated data from sheet
+            const dupMsg = duplicates.length > 0 ? ` (${duplicates.length - (toUpload.length - unique.length)} duplicates skipped)` : '';
+            showToast(`Added ${totalAdded} to ${getAccountName(account)}${dupMsg}`, 'success');
             await syncFromSheet();
         }
     } else {
-        // No API — dedup locally
-        const existingHashes = new Set(store.transactions.map(t => t.hash || txHash(t)));
-        const unique = newTxs.filter(t => !existingHashes.has(t.hash));
-        store.transactions.push(...unique);
+        // No API — add locally
+        store.transactions.push(...toUpload);
         saveStore();
-        showToast(`Added ${unique.length} transactions to ${getAccountName(account)}`, 'success');
+        showToast(`Added ${toUpload.length} transactions to ${getAccountName(account)}`, 'success');
     }
 
     renderDashboard();
     uploadQueue.shift();
     processNextUpload();
+}
+
+function showDupReviewModal(duplicates) {
+    return new Promise(resolve => {
+        dupReviewResolve = resolve;
+        dupReviewDuplicates = duplicates;
+        const list = document.getElementById('dupReviewList');
+        list.innerHTML = duplicates.map((tx, i) => `
+            <label class="dup-row">
+                <input type="checkbox" data-dup-idx="${i}">
+                <span class="dup-date">${String(tx.date || '').substring(0,10)}</span>
+                <div class="dup-info">
+                    <span class="dup-desc">${String(tx.description || '')}</span>
+                </div>
+                <span class="dup-amt ${parseFloat(tx.amount) >= 0 ? 'income' : ''}">£${parseFloat(tx.amount || 0).toFixed(2)}</span>
+            </label>
+        `).join('');
+        document.getElementById('dupReviewModal').classList.add('show');
+    });
+}
+
+function closeDupReview(keepSelected) {
+    document.getElementById('dupReviewModal').classList.remove('show');
+    if (!dupReviewResolve) return;
+
+    if (keepSelected) {
+        const checked = document.querySelectorAll('#dupReviewList input[type="checkbox"]:checked');
+        const kept = [];
+        checked.forEach(cb => {
+            const idx = parseInt(cb.dataset.dupIdx);
+            if (dupReviewDuplicates[idx]) kept.push(dupReviewDuplicates[idx]);
+        });
+        dupReviewResolve(kept);
+    } else {
+        dupReviewResolve([]);
+    }
+    dupReviewResolve = null;
+    dupReviewDuplicates = [];
 }
 
 // ===================== ACCOUNT HELPERS =====================
@@ -3843,6 +3948,11 @@ function confirmNewCategory() {
     }
 
     showToast(`Created: ${emoji} ${name}${parentName ? ' (under ' + getCatEmoji(parentName) + ' ' + parentName + ')' : ''}`, 'success');
+
+    // Sync custom category to Google Sheets
+    if (getApiUrl()) {
+        apiCall('saveCustomCategory', { name, color, keywords: '' });
+    }
 
     // Apply to the pending transaction immediately
     const txId = pendingNewCatTxId;
