@@ -792,6 +792,346 @@
             font-size: 0.85rem;
             margin-top: 8px;
         }
+
+        /* ===== DAILY ALLOWANCE WIDGET ===== */
+        .allowance-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        .allowance-ring {
+            width: 90px;
+            height: 90px;
+            margin: 0 auto 10px;
+            position: relative;
+        }
+        .allowance-ring svg {
+            transform: rotate(-90deg);
+        }
+        .allowance-ring .ring-text {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+        .allowance-amount {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        /* ===== FINANCIAL HEALTH SCORE ===== */
+        .health-score-section {
+            margin-bottom: 24px;
+        }
+        .health-score-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+        }
+        .health-gauge-wrap {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+            flex-wrap: wrap;
+        }
+        .health-gauge {
+            width: 160px;
+            height: 160px;
+            position: relative;
+            flex-shrink: 0;
+        }
+        .health-gauge svg {
+            transform: rotate(-90deg);
+        }
+        .health-gauge-label {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .health-gauge-score {
+            font-size: 2.2rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+        .health-gauge-text {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+        .health-breakdown {
+            flex: 1;
+            min-width: 200px;
+        }
+        .health-factor {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 0;
+            font-size: 0.85rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .health-factor:last-child { border-bottom: none; }
+        .health-factor-bar {
+            width: 80px;
+            height: 6px;
+            background: var(--surface2);
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 0 12px;
+        }
+        .health-factor-fill {
+            height: 100%;
+            border-radius: 3px;
+        }
+        .health-tips {
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+        .health-tip {
+            font-size: 0.8rem;
+            padding: 4px 0;
+            color: var(--text-dim);
+        }
+        .health-tip::before {
+            content: "💡 ";
+        }
+
+        /* ===== RECURRING PAYMENTS ===== */
+        .recurring-section {
+            margin-bottom: 24px;
+        }
+        .recurring-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+        }
+        .recurring-total {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+            margin-bottom: 16px;
+        }
+        .recurring-total span {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--red);
+        }
+        .recurring-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .recurring-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            background: var(--surface2);
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+        .recurring-item-name {
+            flex: 1;
+            font-weight: 500;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .recurring-item-amount {
+            font-weight: 600;
+            color: var(--red);
+            min-width: 70px;
+            text-align: right;
+        }
+        .recurring-item-freq {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            min-width: 70px;
+            text-align: right;
+        }
+        .recurring-badge {
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .recurring-badge.increase {
+            background: rgba(225,112,85,0.15);
+            color: var(--red);
+        }
+        .recurring-badge.review {
+            background: rgba(253,203,110,0.15);
+            color: var(--orange);
+        }
+
+        /* ===== SAVINGS GOALS ===== */
+        .savings-section {
+            margin-bottom: 24px;
+        }
+        .savings-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+        }
+        .savings-goals-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 14px;
+        }
+        .savings-goal-item {
+            background: var(--surface2);
+            border-radius: 10px;
+            padding: 16px;
+        }
+        .savings-goal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .savings-goal-header h4 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .savings-goal-progress-bar {
+            height: 10px;
+            background: var(--bg);
+            border-radius: 5px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .savings-goal-progress-fill {
+            height: 100%;
+            border-radius: 5px;
+            transition: width 0.5s ease;
+        }
+        .savings-goal-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+        }
+        .savings-goal-status {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .savings-goal-status.on-track {
+            background: rgba(0,184,148,0.15);
+            color: var(--green);
+        }
+        .savings-goal-status.behind {
+            background: rgba(225,112,85,0.15);
+            color: var(--red);
+        }
+        .savings-goal-status.ahead {
+            background: rgba(116,185,255,0.15);
+            color: var(--blue);
+        }
+        .savings-goal-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        /* ===== INSIGHTS ===== */
+        .insights-section {
+            margin-bottom: 24px;
+        }
+        .insights-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+        }
+        .insights-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .insight-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px;
+            background: var(--surface2);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        .insight-icon {
+            font-size: 1.3rem;
+            flex-shrink: 0;
+            margin-top: -2px;
+        }
+        .insight-arrow-up { color: var(--red); }
+        .insight-arrow-down { color: var(--green); }
+        .insight-category-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .insight-cat-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 10px;
+            background: var(--surface2);
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+        .insight-cat-change {
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+
+        /* ===== PAYDAY WIDGET ===== */
+        .payday-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            text-align: center;
+        }
+        .payday-countdown {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--accent-light);
+        }
+
+        /* Responsive adjustments for new sections */
+        @media (max-width: 600px) {
+            .health-gauge-wrap { flex-direction: column; align-items: center; }
+            .health-gauge { width: 130px; height: 130px; }
+            .health-gauge-score { font-size: 1.8rem; }
+            .savings-goals-grid { grid-template-columns: 1fr; }
+            .insight-category-grid { grid-template-columns: 1fr; }
+            .recurring-item { flex-wrap: wrap; gap: 6px; }
+            .allowance-ring { width: 70px; height: 70px; }
+        }
     </style>
 </head>
 <body>
@@ -987,6 +1327,43 @@
             <div class="all-accounts-grid" id="accountBreakdownGrid"></div>
         </div>
 
+        <!-- Financial Health Score -->
+        <div class="health-score-section" id="healthScoreSection" style="display:none">
+            <div class="health-score-card">
+                <div class="card-title">Financial Health Score</div>
+                <div class="health-gauge-wrap" id="healthScoreContent"></div>
+            </div>
+        </div>
+
+        <!-- Recurring Payments Tracker -->
+        <div class="recurring-section" id="recurringSection" style="display:none">
+            <div class="recurring-card">
+                <div class="card-title">Recurring Payments & Subscriptions</div>
+                <div class="recurring-total" id="recurringTotal"></div>
+                <div class="recurring-list" id="recurringList"></div>
+            </div>
+        </div>
+
+        <!-- Month-over-Month Insights -->
+        <div class="insights-section" id="insightsSection" style="display:none">
+            <div class="insights-card">
+                <div class="card-title">Monthly Insights</div>
+                <div id="insightsCatGrid" class="insight-category-grid"></div>
+                <div class="insights-list" id="insightsList"></div>
+            </div>
+        </div>
+
+        <!-- Savings Goals -->
+        <div class="savings-section" id="savingsSection" style="display:none">
+            <div class="savings-card">
+                <div class="card-title">
+                    Savings Goals
+                    <button class="btn btn-primary btn-small" onclick="openSavingsGoalModal()">+ Add Goal</button>
+                </div>
+                <div class="savings-goals-grid" id="savingsGoalsGrid"></div>
+            </div>
+        </div>
+
         <!-- Transactions table -->
         <div class="card">
             <div class="card-title">
@@ -1090,6 +1467,15 @@
         </p>
         <div id="customRulesEditor"></div>
         <hr style="border-color:var(--border);margin:16px 0">
+        <h3 style="font-size:1rem;margin-bottom:12px">Payday Settings</h3>
+        <div class="form-group">
+            <label>Payday (day of month, e.g. 25)</label>
+            <input type="number" id="paydayDate" min="1" max="31" placeholder="25" style="width:100px">
+        </div>
+        <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:4px">
+            Budget periods and daily allowance will align with your pay cycle instead of calendar months.
+        </p>
+        <hr style="border-color:var(--border);margin:16px 0">
         <h3 style="font-size:1rem;margin-bottom:12px">Security</h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
             <button class="btn btn-outline" onclick="openPinChange()">Change PIN</button>
@@ -1145,6 +1531,39 @@
             <button class="btn btn-primary" onclick="assignUpload('person1')" id="btnAssign1">Person 1</button>
             <button class="btn btn-primary" onclick="assignUpload('person2')" id="btnAssign2">Person 2</button>
             <button class="btn btn-primary" onclick="assignUpload('joint')" id="btnAssignJ">Joint</button>
+        </div>
+    </div>
+</div>
+
+<!-- Savings Goal Modal -->
+<div class="modal-overlay" id="savingsGoalModal">
+    <div class="modal">
+        <button class="modal-close" onclick="closeSavingsGoalModal()">&times;</button>
+        <h2 id="savingsGoalModalTitle">Add Savings Goal</h2>
+        <input type="hidden" id="editGoalIndex" value="-1">
+        <div class="form-group">
+            <label>Goal Name</label>
+            <input type="text" id="goalName" placeholder="e.g. Holiday Fund, New Car...">
+        </div>
+        <div class="form-group">
+            <label>Emoji</label>
+            <input type="text" id="goalEmoji" value="🎯" maxlength="2" style="width:60px">
+        </div>
+        <div class="form-group">
+            <label>Target Amount (£)</label>
+            <input type="number" id="goalTarget" placeholder="1000" min="1" step="50">
+        </div>
+        <div class="form-group">
+            <label>Current Amount Saved (£)</label>
+            <input type="number" id="goalCurrent" placeholder="0" min="0" step="10">
+        </div>
+        <div class="form-group">
+            <label>Target Date</label>
+            <input type="date" id="goalDate">
+        </div>
+        <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-outline" onclick="closeSavingsGoalModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveSavingsGoal()">Save Goal</button>
         </div>
     </div>
 </div>
@@ -1806,7 +2225,9 @@ function defaultStore() {
             name2: 'Person 2',
             nameJoint: 'Joint',
             customRules: {},
-            customCategories: {}
+            customCategories: {},
+            savingsGoals: [],
+            paydayDate: null
         }
     };
 }
@@ -2482,6 +2903,8 @@ function renderDashboard() {
             <div class="value neutral">£${txs.length ? (totalSpent / getDaysInRange(txs)).toFixed(2) : '0.00'}</div>
             <div class="sub">${getDaysInRange(txs)} days</div>
         </div>
+        <div id="dailyAllowanceCard" class="allowance-card" style="display:none"></div>
+        <div id="paydayCard" class="payday-card" style="display:none"></div>
     `;
     document.getElementById('summaryCards').innerHTML = summaryHTML;
 
@@ -2495,6 +2918,14 @@ function renderDashboard() {
     renderCatCompareChart();
     renderTransactions();
     renderAllAccountsOverview();
+
+    // New feature renders
+    renderDailyAllowance(txs, totalSpent, totalIncome);
+    renderPaydayWidget();
+    renderFinancialHealthScore(txs, debits, credits, totalSpent, totalIncome);
+    renderRecurringPayments();
+    renderInsights();
+    renderSavingsGoals();
 }
 
 function getDaysInRange(txs) {
@@ -3487,6 +3918,7 @@ function openSettings() {
     document.getElementById('name1').value = store.settings.name1;
     document.getElementById('name2').value = store.settings.name2;
     document.getElementById('nameJoint').value = store.settings.nameJoint;
+    document.getElementById('paydayDate').value = store.settings.paydayDate || '';
 
     // Render custom categories list
     renderCustomCatList();
@@ -3521,6 +3953,8 @@ function saveSettings() {
     store.settings.name1 = document.getElementById('name1').value || 'Person 1';
     store.settings.name2 = document.getElementById('name2').value || 'Person 2';
     store.settings.nameJoint = document.getElementById('nameJoint').value || 'Joint';
+    const paydayVal = parseInt(document.getElementById('paydayDate').value);
+    store.settings.paydayDate = (paydayVal >= 1 && paydayVal <= 31) ? paydayVal : null;
 
     // Save custom rules
     const allCats = Object.keys(CATEGORIES).filter(c => c !== 'Other');
@@ -3684,6 +4118,675 @@ function renderCustomCatList() {
             <span style="width:12px;height:12px;border-radius:50%;background:${info.color};display:inline-block"></span>
             <span style="flex:1;font-size:0.9rem">${name}</span>
             <button class="btn btn-outline btn-small" onclick="removeCustomCategory('${name.replace(/'/g, "\\'")}')" style="color:var(--red);border-color:var(--red)">Remove</button>
+        </div>
+    `).join('');
+}
+
+// ===================== PAYDAY CYCLE HELPERS =====================
+function getPaydayDate() {
+    return store.settings.paydayDate || null;
+}
+
+function getPayCycleRange() {
+    const payday = getPaydayDate();
+    const now = new Date();
+    if (!payday) {
+        // Use calendar month
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        return { start, end, daysTotal: end.getDate(), daysLeft: end.getDate() - now.getDate() + 1 };
+    }
+    // Pay cycle: from payday of current/previous month to payday of next month
+    let cycleStart, cycleEnd;
+    if (now.getDate() >= payday) {
+        cycleStart = new Date(now.getFullYear(), now.getMonth(), payday);
+        cycleEnd = new Date(now.getFullYear(), now.getMonth() + 1, payday - 1);
+    } else {
+        cycleStart = new Date(now.getFullYear(), now.getMonth() - 1, payday);
+        cycleEnd = new Date(now.getFullYear(), now.getMonth(), payday - 1);
+    }
+    const daysTotal = Math.round((cycleEnd - cycleStart) / (1000*60*60*24)) + 1;
+    const daysLeft = Math.max(1, Math.round((cycleEnd - now) / (1000*60*60*24)) + 1);
+    return { start: cycleStart, end: cycleEnd, daysTotal, daysLeft };
+}
+
+function getDaysUntilPayday() {
+    const payday = getPaydayDate();
+    if (!payday) return null;
+    const now = new Date();
+    let nextPayday;
+    if (now.getDate() >= payday) {
+        nextPayday = new Date(now.getFullYear(), now.getMonth() + 1, payday);
+    } else {
+        nextPayday = new Date(now.getFullYear(), now.getMonth(), payday);
+    }
+    return Math.max(0, Math.ceil((nextPayday - now) / (1000*60*60*24)));
+}
+
+// ===================== DAILY ALLOWANCE WIDGET =====================
+function renderDailyAllowance(txs, totalSpent, totalIncome) {
+    const card = document.getElementById('dailyAllowanceCard');
+    if (!card) return;
+
+    const cycle = getPayCycleRange();
+    const now = new Date();
+    const cycleStartStr = cycle.start.toISOString().substring(0, 10);
+    const todayStr = now.toISOString().substring(0, 10);
+
+    // Calculate spending within current cycle
+    let cycleSpent = 0;
+    let cycleBudgetTotal = 0;
+    const budgets = store.budgets || {};
+
+    // Get total monthly budget (sum of all budgets)
+    for (const [cat, amount] of Object.entries(budgets)) {
+        if (cat !== 'Income' && cat !== 'Transfers') {
+            cycleBudgetTotal += amount;
+        }
+    }
+
+    // If no budgets set, use average income as reference
+    if (cycleBudgetTotal === 0) {
+        // Use current period income or totalIncome
+        const allTxs = store.transactions;
+        const months = new Set(allTxs.filter(t => t.date).map(t => t.date.substring(0, 7)));
+        const avgIncome = months.size > 0 ? allTxs.filter(t => t.amount > 0).reduce((s,t) => s + t.amount, 0) / months.size : 0;
+        cycleBudgetTotal = avgIncome * 0.7; // Assume 70% can be spent
+    }
+
+    // Get spending in current cycle
+    const allTxs = store.transactions.filter(t => t.amount < 0 && t.date && t.date >= cycleStartStr && t.date <= todayStr);
+    if (currentAccount !== 'all') {
+        cycleSpent = allTxs.filter(t => t.account === currentAccount).reduce((s,t) => s + Math.abs(t.amount), 0);
+    } else {
+        cycleSpent = allTxs.reduce((s,t) => s + Math.abs(t.amount), 0);
+    }
+
+    const remaining = Math.max(0, cycleBudgetTotal - cycleSpent);
+    const dailyAllowance = cycle.daysLeft > 0 ? remaining / cycle.daysLeft : 0;
+    const pct = cycleBudgetTotal > 0 ? Math.min(1, cycleSpent / cycleBudgetTotal) : 0;
+
+    // Color: green if <60%, amber if 60-90%, red if >90%
+    let color = 'var(--green)';
+    let status = 'On Track';
+    if (pct > 0.9) { color = 'var(--red)'; status = 'Overspent'; }
+    else if (pct > 0.6) { color = 'var(--orange)'; status = 'Getting Tight'; }
+
+    const ringPct = Math.min(pct * 100, 100);
+    const circumference = 2 * Math.PI * 36;
+    const dashOffset = circumference - (ringPct / 100) * circumference;
+
+    card.style.display = 'block';
+    card.innerHTML = `
+        <div class="label">Daily Allowance</div>
+        <div class="allowance-ring">
+            <svg width="90" height="90" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="36" fill="none" stroke="var(--surface2)" stroke-width="6"/>
+                <circle cx="40" cy="40" r="36" fill="none" stroke="${color}" stroke-width="6"
+                    stroke-dasharray="${circumference}" stroke-dashoffset="${dashOffset}" stroke-linecap="round"/>
+            </svg>
+            <div class="ring-text" style="color:${color}">${Math.round(pct * 100)}%</div>
+        </div>
+        <div class="allowance-amount" style="color:${color}">£${dailyAllowance.toFixed(2)}</div>
+        <div class="sub" style="color:${color};font-weight:600">${status}</div>
+        <div class="sub">£${remaining.toFixed(0)} left for ${cycle.daysLeft} days</div>
+    `;
+}
+
+// ===================== PAYDAY WIDGET =====================
+function renderPaydayWidget() {
+    const card = document.getElementById('paydayCard');
+    if (!card) return;
+
+    const daysUntil = getDaysUntilPayday();
+    if (daysUntil === null) {
+        card.style.display = 'none';
+        return;
+    }
+
+    card.style.display = 'block';
+    card.innerHTML = `
+        <div class="label">Payday Countdown</div>
+        <div class="payday-countdown">${daysUntil === 0 ? 'Payday!' : daysUntil}</div>
+        <div class="sub">${daysUntil === 0 ? 'It\'s payday today!' : `day${daysUntil !== 1 ? 's' : ''} until payday`}</div>
+        <div class="sub" style="margin-top:4px">Pay cycle: ${getPaydayDate()}${getOrdinalSuffix(getPaydayDate())} of each month</div>
+    `;
+}
+
+function getOrdinalSuffix(n) {
+    if (!n) return '';
+    const s = ['th','st','nd','rd'];
+    const v = n % 100;
+    return s[(v - 20) % 10] || s[v] || s[0];
+}
+
+// ===================== FINANCIAL HEALTH SCORE =====================
+function renderFinancialHealthScore(txs, debits, credits, totalSpent, totalIncome) {
+    const section = document.getElementById('healthScoreSection');
+    const content = document.getElementById('healthScoreContent');
+    if (!section || !content) return;
+
+    if (txs.length === 0) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+
+    // 1. Savings rate (up to 30 points)
+    let savingsRate = totalIncome > 0 ? (totalIncome - totalSpent) / totalIncome : 0;
+    savingsRate = Math.max(0, Math.min(1, savingsRate));
+    const savingsPoints = Math.round(savingsRate * 30);
+
+    // 2. Budget adherence (up to 25 points)
+    const budgets = store.budgets || {};
+    const budgetCats = Object.keys(budgets);
+    let budgetedCount = 0;
+    let withinBudget = 0;
+    if (budgetCats.length > 0) {
+        const catTotals = {};
+        debits.forEach(t => {
+            const parent = getParentCategory(t.category || 'Other');
+            catTotals[parent] = (catTotals[parent] || 0) + Math.abs(t.amount);
+        });
+        budgetCats.forEach(cat => {
+            budgetedCount++;
+            if ((catTotals[cat] || 0) <= budgets[cat]) withinBudget++;
+        });
+    }
+    const budgetAdherence = budgetedCount > 0 ? withinBudget / budgetedCount : 0.5;
+    const budgetPoints = Math.round(budgetAdherence * 25);
+
+    // 3. Spending trend (up to 20 points) - compare last 2 months
+    const allTxs = store.transactions;
+    const months = [...new Set(allTxs.filter(t => t.date).map(t => t.date.substring(0, 7)))].sort();
+    let trendPoints = 10; // neutral
+    if (months.length >= 2) {
+        const lastMonth = months[months.length - 1];
+        const prevMonth = months[months.length - 2];
+        const lastSpend = allTxs.filter(t => t.amount < 0 && t.date && t.date.startsWith(lastMonth)).reduce((s,t) => s + Math.abs(t.amount), 0);
+        const prevSpend = allTxs.filter(t => t.amount < 0 && t.date && t.date.startsWith(prevMonth)).reduce((s,t) => s + Math.abs(t.amount), 0);
+        if (prevSpend > 0) {
+            const change = (lastSpend - prevSpend) / prevSpend;
+            if (change < -0.1) trendPoints = 20; // spending decreased 10%+
+            else if (change < 0) trendPoints = 15;
+            else if (change < 0.1) trendPoints = 10;
+            else if (change < 0.2) trendPoints = 5;
+            else trendPoints = 0;
+        }
+    }
+
+    // 4. Subscription waste (up to 15 points)
+    const recurring = detectRecurringPayments();
+    const reviewCount = recurring.filter(r => r.review).length;
+    const subWastePoints = recurring.length > 0 ? Math.round(Math.max(0, 1 - reviewCount / recurring.length) * 15) : 15;
+
+    // 5. Emergency fund / savings progress (up to 10 points)
+    const goals = store.settings.savingsGoals || [];
+    let fundPoints = 5; // default neutral
+    if (goals.length > 0) {
+        const avgProgress = goals.reduce((s, g) => s + Math.min(1, (g.current || 0) / (g.target || 1)), 0) / goals.length;
+        fundPoints = Math.round(avgProgress * 10);
+    }
+
+    const totalScore = savingsPoints + budgetPoints + trendPoints + subWastePoints + fundPoints;
+
+    // Color based on score
+    let scoreColor = 'var(--red)';
+    let scoreLabel = 'Needs Work';
+    if (totalScore >= 75) { scoreColor = 'var(--green)'; scoreLabel = 'Excellent'; }
+    else if (totalScore >= 55) { scoreColor = 'var(--orange)'; scoreLabel = 'Good'; }
+    else if (totalScore >= 35) { scoreColor = 'var(--orange)'; scoreLabel = 'Fair'; }
+
+    const gaugeCircumference = 2 * Math.PI * 65;
+    const gaugeDashOffset = gaugeCircumference - (totalScore / 100) * gaugeCircumference;
+
+    // Factors
+    const factors = [
+        { name: 'Savings Rate', points: savingsPoints, max: 30, color: 'var(--green)' },
+        { name: 'Budget Adherence', points: budgetPoints, max: 25, color: 'var(--accent-light)' },
+        { name: 'Spending Trend', points: trendPoints, max: 20, color: 'var(--blue)' },
+        { name: 'Subscription Health', points: subWastePoints, max: 15, color: 'var(--teal)' },
+        { name: 'Savings Goals', points: fundPoints, max: 10, color: 'var(--pink)' }
+    ];
+
+    // Tips
+    const tips = [];
+    if (savingsPoints < 15) tips.push('Try to save at least 20% of your income each month.');
+    if (budgetPoints < 15) tips.push('Set budgets for more categories and try to stay within them.');
+    if (trendPoints < 10) tips.push('Your spending is trending up -- look for areas to cut back.');
+    if (subWastePoints < 10) tips.push('Review flagged subscriptions -- you may be paying for services you don\'t use.');
+    if (fundPoints < 5) tips.push('Start building an emergency fund or set a savings goal.');
+
+    content.innerHTML = `
+        <div class="health-gauge">
+            <svg width="160" height="160" viewBox="0 0 160 160">
+                <circle cx="80" cy="80" r="65" fill="none" stroke="var(--surface2)" stroke-width="10"/>
+                <circle cx="80" cy="80" r="65" fill="none" stroke="${scoreColor}" stroke-width="10"
+                    stroke-dasharray="${gaugeCircumference}" stroke-dashoffset="${gaugeDashOffset}" stroke-linecap="round"/>
+            </svg>
+            <div class="health-gauge-label">
+                <div class="health-gauge-score" style="color:${scoreColor}">${totalScore}</div>
+                <div class="health-gauge-text">${scoreLabel}</div>
+            </div>
+        </div>
+        <div class="health-breakdown">
+            ${factors.map(f => `
+                <div class="health-factor">
+                    <span>${f.name}</span>
+                    <div class="health-factor-bar">
+                        <div class="health-factor-fill" style="width:${(f.points/f.max)*100}%;background:${f.color}"></div>
+                    </div>
+                    <span style="font-size:0.8rem;min-width:40px;text-align:right">${f.points}/${f.max}</span>
+                </div>
+            `).join('')}
+            ${tips.length > 0 ? `
+            <div class="health-tips">
+                ${tips.slice(0, 3).map(t => `<div class="health-tip">${t}</div>`).join('')}
+            </div>` : ''}
+        </div>
+    `;
+}
+
+// ===================== RECURRING PAYMENTS TRACKER =====================
+function detectRecurringPayments() {
+    let allTxs = store.transactions.filter(t => t.amount < 0 && t.date);
+    if (currentAccount !== 'all') {
+        allTxs = allTxs.filter(t => t.account === currentAccount);
+    }
+
+    // Group by merchant name
+    const merchants = {};
+    allTxs.forEach(t => {
+        const name = getMerchantName(t.description);
+        if (!merchants[name]) merchants[name] = [];
+        merchants[name].push(t);
+    });
+
+    const recurring = [];
+    const now = new Date();
+    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+    const sixWeeksAgo = new Date(now.getTime() - 42 * 24*60*60*1000);
+
+    for (const [name, txList] of Object.entries(merchants)) {
+        if (txList.length < 2) continue;
+
+        // Check if transactions span multiple months
+        const months = new Set(txList.map(t => t.date.substring(0, 7)));
+        if (months.size < 2) continue;
+
+        // Sort by date
+        const sorted = [...txList].sort((a, b) => a.date.localeCompare(b.date));
+
+        // Calculate average gap between transactions
+        let totalGap = 0;
+        for (let i = 1; i < sorted.length; i++) {
+            const gap = (new Date(sorted[i].date) - new Date(sorted[i-1].date)) / (1000*60*60*24);
+            totalGap += gap;
+        }
+        const avgGap = totalGap / (sorted.length - 1);
+
+        // Determine frequency
+        let frequency = 'monthly';
+        if (avgGap < 10) frequency = 'weekly';
+        else if (avgGap > 45) frequency = 'quarterly';
+
+        // Get latest amount
+        const latestAmount = Math.abs(sorted[sorted.length - 1].amount);
+
+        // Check for price increase
+        const amounts = sorted.map(t => Math.abs(t.amount));
+        const recentAmounts = amounts.slice(-3);
+        const olderAmounts = amounts.slice(0, -3);
+        let priceIncrease = false;
+        if (olderAmounts.length > 0) {
+            const oldAvg = olderAmounts.reduce((a,b)=>a+b,0) / olderAmounts.length;
+            const newAvg = recentAmounts.reduce((a,b)=>a+b,0) / recentAmounts.length;
+            if (newAvg > oldAvg * 1.05) priceIncrease = true;
+        }
+
+        // Check if used recently (last 6 weeks)
+        const lastDate = new Date(sorted[sorted.length - 1].date);
+        const review = lastDate < sixWeeksAgo;
+
+        // Calculate next expected date
+        const lastTxDate = new Date(sorted[sorted.length - 1].date);
+        const nextDate = new Date(lastTxDate.getTime() + avgGap * 24*60*60*1000);
+
+        // Monthly cost normalization
+        let monthlyCost = latestAmount;
+        if (frequency === 'weekly') monthlyCost = latestAmount * 4.33;
+        else if (frequency === 'quarterly') monthlyCost = latestAmount / 3;
+
+        recurring.push({
+            name,
+            amount: latestAmount,
+            monthlyCost,
+            frequency,
+            nextDate,
+            priceIncrease,
+            review,
+            count: txList.length,
+            category: sorted[sorted.length - 1].category || 'Other'
+        });
+    }
+
+    // Sort by monthly cost descending
+    recurring.sort((a, b) => b.monthlyCost - a.monthlyCost);
+    return recurring;
+}
+
+function renderRecurringPayments() {
+    const section = document.getElementById('recurringSection');
+    const list = document.getElementById('recurringList');
+    const totalEl = document.getElementById('recurringTotal');
+    if (!section || !list) return;
+
+    const recurring = detectRecurringPayments();
+    if (recurring.length === 0) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+
+    const totalMonthly = recurring.reduce((s, r) => s + r.monthlyCost, 0);
+    totalEl.innerHTML = `Estimated monthly recurring: <span>£${totalMonthly.toFixed(2)}</span> across ${recurring.length} payments`;
+
+    list.innerHTML = recurring.map(r => {
+        const emoji = getCatEmoji(r.category);
+        const nextStr = r.nextDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+        let badges = '';
+        if (r.priceIncrease) badges += '<span class="recurring-badge increase">Price Increase</span>';
+        if (r.review) badges += '<span class="recurring-badge review">Review</span>';
+
+        return `
+            <div class="recurring-item">
+                <span style="font-size:1.2rem">${emoji}</span>
+                <span class="recurring-item-name">${r.name}</span>
+                ${badges}
+                <span class="recurring-item-freq">${r.frequency}<br><span style="font-size:0.7rem">Next: ${nextStr}</span></span>
+                <span class="recurring-item-amount">£${r.amount.toFixed(2)}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+// ===================== SAVINGS GOALS =====================
+function openSavingsGoalModal(index) {
+    const modal = document.getElementById('savingsGoalModal');
+    const titleEl = document.getElementById('savingsGoalModalTitle');
+    const indexEl = document.getElementById('editGoalIndex');
+
+    if (index !== undefined && index >= 0) {
+        const goal = (store.settings.savingsGoals || [])[index];
+        if (goal) {
+            titleEl.textContent = 'Edit Savings Goal';
+            indexEl.value = index;
+            document.getElementById('goalName').value = goal.name || '';
+            document.getElementById('goalEmoji').value = goal.emoji || '🎯';
+            document.getElementById('goalTarget').value = goal.target || '';
+            document.getElementById('goalCurrent').value = goal.current || '';
+            document.getElementById('goalDate').value = goal.targetDate || '';
+            modal.classList.add('show');
+            return;
+        }
+    }
+
+    titleEl.textContent = 'Add Savings Goal';
+    indexEl.value = -1;
+    document.getElementById('goalName').value = '';
+    document.getElementById('goalEmoji').value = '🎯';
+    document.getElementById('goalTarget').value = '';
+    document.getElementById('goalCurrent').value = '';
+    document.getElementById('goalDate').value = '';
+    modal.classList.add('show');
+}
+
+function closeSavingsGoalModal() {
+    document.getElementById('savingsGoalModal').classList.remove('show');
+}
+
+function saveSavingsGoal() {
+    const name = document.getElementById('goalName').value.trim();
+    const emoji = document.getElementById('goalEmoji').value || '🎯';
+    const target = parseFloat(document.getElementById('goalTarget').value);
+    const current = parseFloat(document.getElementById('goalCurrent').value) || 0;
+    const targetDate = document.getElementById('goalDate').value;
+    const editIndex = parseInt(document.getElementById('editGoalIndex').value);
+
+    if (!name || !target || target <= 0) {
+        showToast('Please enter a name and target amount', 'error');
+        return;
+    }
+
+    if (!store.settings.savingsGoals) store.settings.savingsGoals = [];
+
+    const goal = { name, emoji, target, current, targetDate };
+
+    if (editIndex >= 0 && editIndex < store.settings.savingsGoals.length) {
+        store.settings.savingsGoals[editIndex] = goal;
+    } else {
+        store.settings.savingsGoals.push(goal);
+    }
+
+    saveStore();
+    closeSavingsGoalModal();
+    renderSavingsGoals();
+    showToast('Savings goal saved', 'success');
+}
+
+function deleteSavingsGoal(index) {
+    if (!confirm('Delete this savings goal?')) return;
+    store.settings.savingsGoals.splice(index, 1);
+    saveStore();
+    renderSavingsGoals();
+    showToast('Goal removed', 'success');
+}
+
+function updateGoalAmount(index, delta) {
+    const goals = store.settings.savingsGoals || [];
+    if (index < 0 || index >= goals.length) return;
+    const amount = parseFloat(prompt(`Add/subtract amount (e.g. 50 or -20):`, delta || '50'));
+    if (isNaN(amount)) return;
+    goals[index].current = Math.max(0, (goals[index].current || 0) + amount);
+    saveStore();
+    renderSavingsGoals();
+    showToast(`Updated: £${goals[index].current.toFixed(2)} saved`, 'success');
+}
+
+function renderSavingsGoals() {
+    const section = document.getElementById('savingsSection');
+    const grid = document.getElementById('savingsGoalsGrid');
+    if (!section || !grid) return;
+
+    const goals = store.settings.savingsGoals || [];
+    if (goals.length === 0) {
+        section.style.display = 'block';
+        grid.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem">No savings goals yet. Click "+ Add Goal" to get started.</p>';
+        return;
+    }
+
+    section.style.display = 'block';
+    const now = new Date();
+
+    grid.innerHTML = goals.map((goal, i) => {
+        const pct = goal.target > 0 ? Math.min(100, (goal.current / goal.target) * 100) : 0;
+        const remaining = Math.max(0, goal.target - goal.current);
+
+        // On track calculation
+        let status = 'on-track';
+        let statusText = 'On Track';
+        let monthlyNeeded = 0;
+
+        if (goal.targetDate) {
+            const targetD = new Date(goal.targetDate);
+            const monthsLeft = Math.max(0.5, (targetD - now) / (1000*60*60*24*30));
+            monthlyNeeded = remaining / monthsLeft;
+
+            // Check if on track: compare expected progress vs actual
+            const totalMonths = Math.max(1, (targetD - new Date(targetD.getFullYear(), targetD.getMonth() - 12, targetD.getDate())) / (1000*60*60*24*30));
+            const elapsed = Math.max(0, totalMonths - monthsLeft);
+            const expectedPct = elapsed / totalMonths * 100;
+
+            if (pct >= 100) { status = 'ahead'; statusText = 'Complete!'; }
+            else if (pct >= expectedPct - 5) { status = 'on-track'; statusText = 'On Track'; }
+            else if (pct >= expectedPct - 20) { status = 'on-track'; statusText = 'Slightly Behind'; }
+            else { status = 'behind'; statusText = 'Behind Schedule'; }
+        } else {
+            if (pct >= 100) { status = 'ahead'; statusText = 'Complete!'; }
+        }
+
+        const barColor = pct >= 100 ? 'var(--green)' : status === 'behind' ? 'var(--red)' : 'var(--accent-light)';
+
+        return `
+            <div class="savings-goal-item">
+                <div class="savings-goal-header">
+                    <h4>${goal.emoji} ${goal.name}</h4>
+                    <span class="savings-goal-status ${status}">${statusText}</span>
+                </div>
+                <div class="savings-goal-progress-bar">
+                    <div class="savings-goal-progress-fill" style="width:${pct}%;background:${barColor}"></div>
+                </div>
+                <div class="savings-goal-stats">
+                    <span>£${(goal.current || 0).toFixed(0)} / £${goal.target.toFixed(0)} (${pct.toFixed(0)}%)</span>
+                    ${goal.targetDate ? `<span>£${monthlyNeeded.toFixed(0)}/mo needed</span>` : ''}
+                </div>
+                ${goal.targetDate ? `<div style="font-size:0.75rem;color:var(--text-dim);margin-top:4px">Target: ${formatDate(goal.targetDate)}</div>` : ''}
+                <div class="savings-goal-actions">
+                    <button class="btn btn-outline btn-small" onclick="updateGoalAmount(${i})">+ Add Funds</button>
+                    <button class="btn btn-outline btn-small" onclick="openSavingsGoalModal(${i})">Edit</button>
+                    <button class="btn btn-outline btn-small" onclick="deleteSavingsGoal(${i})" style="color:var(--red);border-color:var(--red)">Delete</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ===================== MONTH-OVER-MONTH INSIGHTS =====================
+function renderInsights() {
+    const section = document.getElementById('insightsSection');
+    const catGrid = document.getElementById('insightsCatGrid');
+    const list = document.getElementById('insightsList');
+    if (!section || !list) return;
+
+    const allTxs = store.transactions.filter(t => t.date && t.amount < 0);
+    const months = [...new Set(allTxs.map(t => t.date.substring(0, 7)))].sort();
+
+    if (months.length < 2) { section.style.display = 'none'; return; }
+    section.style.display = 'block';
+
+    const currentMonth = months[months.length - 1];
+    const prevMonth = months[months.length - 2];
+
+    // Get spending by parent category for each month
+    function getMonthSpend(month) {
+        const txs = allTxs.filter(t => t.date.startsWith(month));
+        if (currentAccount !== 'all') {
+            return txs.filter(t => t.account === currentAccount);
+        }
+        return txs;
+    }
+
+    const currentTxs = getMonthSpend(currentMonth);
+    const prevTxs = getMonthSpend(prevMonth);
+
+    const currentCats = {};
+    currentTxs.forEach(t => {
+        const parent = getParentCategory(t.category || 'Other');
+        currentCats[parent] = (currentCats[parent] || 0) + Math.abs(t.amount);
+    });
+
+    const prevCats = {};
+    prevTxs.forEach(t => {
+        const parent = getParentCategory(t.category || 'Other');
+        prevCats[parent] = (prevCats[parent] || 0) + Math.abs(t.amount);
+    });
+
+    // Category comparison grid
+    const allCats = new Set([...Object.keys(currentCats), ...Object.keys(prevCats)]);
+    const catChanges = [];
+    allCats.forEach(cat => {
+        if (cat === 'Income' || cat === 'Transfers') return;
+        const cur = currentCats[cat] || 0;
+        const prev = prevCats[cat] || 0;
+        const diff = cur - prev;
+        const pctChange = prev > 0 ? ((cur - prev) / prev) * 100 : (cur > 0 ? 100 : 0);
+        catChanges.push({ cat, cur, prev, diff, pctChange });
+    });
+
+    catChanges.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+
+    catGrid.innerHTML = catChanges.filter(c => c.cur > 0 || c.prev > 0).map(c => {
+        const arrow = c.diff > 0 ? '↑' : c.diff < 0 ? '↓' : '→';
+        const color = c.diff > 5 ? 'var(--red)' : c.diff < -5 ? 'var(--green)' : 'var(--text-dim)';
+        const emoji = getCatEmoji(c.cat);
+        return `
+            <div class="insight-cat-item">
+                <span>${emoji} ${c.cat}</span>
+                <span class="insight-cat-change" style="color:${color}">
+                    ${arrow} £${Math.abs(c.diff).toFixed(0)}
+                    <span style="font-size:0.7rem;opacity:0.7">(${c.pctChange > 0 ? '+' : ''}${c.pctChange.toFixed(0)}%)</span>
+                </span>
+            </div>
+        `;
+    }).join('');
+
+    // Generate automated insights
+    const insights = [];
+
+    // Biggest increases
+    const increases = catChanges.filter(c => c.diff > 10 && c.pctChange > 10).sort((a,b) => b.pctChange - a.pctChange);
+    increases.slice(0, 2).forEach(c => {
+        insights.push({
+            icon: '📈',
+            type: 'up',
+            text: `Your <strong>${c.cat}</strong> spending increased ${Math.abs(c.pctChange).toFixed(0)}% vs last month (£${c.prev.toFixed(0)} → £${c.cur.toFixed(0)})`
+        });
+    });
+
+    // Biggest decreases
+    const decreases = catChanges.filter(c => c.diff < -10 && c.pctChange < -10).sort((a,b) => a.pctChange - b.pctChange);
+    decreases.slice(0, 2).forEach(c => {
+        insights.push({
+            icon: '🎉',
+            type: 'down',
+            text: `Great job! <strong>${c.cat}</strong> spending is down £${Math.abs(c.diff).toFixed(0)} vs last month`
+        });
+    });
+
+    // Frequent merchant visits
+    const merchantCounts = {};
+    currentTxs.forEach(t => {
+        const name = getMerchantName(t.description);
+        merchantCounts[name] = (merchantCounts[name] || 0) + 1;
+    });
+    const frequentMerchants = Object.entries(merchantCounts).filter(([,c]) => c >= 5).sort((a,b) => b[1] - a[1]);
+    frequentMerchants.slice(0, 1).forEach(([name, count]) => {
+        insights.push({
+            icon: '🏪',
+            type: 'neutral',
+            text: `You've visited <strong>${name}</strong> ${count} times this month`
+        });
+    });
+
+    // Total comparison
+    const currentTotal = currentTxs.reduce((s,t) => s + Math.abs(t.amount), 0);
+    const prevTotal = prevTxs.reduce((s,t) => s + Math.abs(t.amount), 0);
+    const totalDiff = currentTotal - prevTotal;
+    if (Math.abs(totalDiff) > 50) {
+        insights.push({
+            icon: totalDiff > 0 ? '💸' : '💰',
+            type: totalDiff > 0 ? 'up' : 'down',
+            text: `Overall spending is ${totalDiff > 0 ? 'up' : 'down'} £${Math.abs(totalDiff).toFixed(0)} compared to ${formatMonth(prevMonth)}`
+        });
+    }
+
+    // If no insights generated, add a neutral one
+    if (insights.length === 0) {
+        insights.push({
+            icon: '📊',
+            type: 'neutral',
+            text: `Spending is fairly consistent between ${formatMonth(prevMonth)} and ${formatMonth(currentMonth)}`
+        });
+    }
+
+    list.innerHTML = insights.slice(0, 5).map(i => `
+        <div class="insight-item">
+            <span class="insight-icon">${i.icon}</span>
+            <span>${i.text}</span>
         </div>
     `).join('');
 }
