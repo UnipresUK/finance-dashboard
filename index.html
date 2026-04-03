@@ -1254,7 +1254,8 @@
         <div class="filter-section">
             <h4>Quick Select</h4>
             <div class="filter-quick-btns">
-                <button class="filter-chip active" onclick="setFilterPreset('all')">All Time</button>
+                <button class="filter-chip active" onclick="setFilterPreset('currentMonth')">This Month</button>
+                <button class="filter-chip" onclick="setFilterPreset('all')">All Time</button>
                 <button class="filter-chip" onclick="setFilterPreset('ytd')">Year to Date</button>
                 <button class="filter-chip" onclick="setFilterPreset('last3')">Last 3 Months</button>
                 <button class="filter-chip" onclick="setFilterPreset('last6')">Last 6 Months</button>
@@ -1512,13 +1513,18 @@
         </p>
         <div id="customRulesEditor"></div>
         <hr style="border-color:var(--border);margin:16px 0">
-        <h3 style="font-size:1rem;margin-bottom:12px">Payday Settings</h3>
+        <h3 style="font-size:1rem;margin-bottom:12px">Payday & Month Cycle</h3>
         <div class="form-group">
             <label>Payday (day of month, e.g. 25)</label>
             <input type="number" id="paydayDate" min="1" max="31" placeholder="25" style="width:100px">
         </div>
+        <div class="form-group" style="margin-top:8px">
+            <label>Month starts on day (e.g. 23)</label>
+            <input type="number" id="monthStartDay" min="1" max="31" placeholder="1" style="width:100px">
+        </div>
         <p style="font-size:0.8rem;color:var(--text-dim);margin-bottom:4px">
-            Budget periods and daily allowance will align with your pay cycle instead of calendar months.
+            Your budget month will run from this day to the day before next month's start.<br>
+            E.g. day 23 = each month runs 23rd → 22nd. Jodie pays in on 23rd, Sam on 25th.
         </p>
         <hr style="border-color:var(--border);margin:16px 0">
         <h3 style="font-size:1rem;margin-bottom:12px">Security</h3>
@@ -2208,6 +2214,14 @@ async function syncFromSheet() {
                 store.settings.customRules = typeof data.settings.customRules === 'string'
                     ? JSON.parse(data.settings.customRules) : data.settings.customRules;
             }
+            if (data.settings.paydayDate !== undefined) {
+                store.settings.paydayDate = typeof data.settings.paydayDate === 'string'
+                    ? parseInt(data.settings.paydayDate) : data.settings.paydayDate;
+            }
+            if (data.settings.monthStartDay !== undefined) {
+                store.settings.monthStartDay = typeof data.settings.monthStartDay === 'string'
+                    ? parseInt(data.settings.monthStartDay) : data.settings.monthStartDay;
+            }
         }
 
         // Merge custom categories
@@ -2315,7 +2329,8 @@ function defaultStore() {
             customRules: {},
             customCategories: {},
             savingsGoals: [],
-            paydayDate: null
+            paydayDate: null,
+            monthStartDay: 23
         }
     };
 }
@@ -2859,15 +2874,54 @@ function switchAccount(account) {
 }
 
 // ===================== FILTER SLICER =====================
-let activeFilter = { type: 'all', months: [], dateFrom: null, dateTo: null };
+let activeFilter = { type: 'currentMonth', months: [], dateFrom: null, dateTo: null };
 let analysisPeriod = 'weekly';
+
+// Custom month helpers — month runs from monthStartDay to (monthStartDay - 1) of next month
+function getMonthStartDay() {
+    return store.settings.monthStartDay || 1;
+}
+
+function getCustomMonthRange(date) {
+    const msd = getMonthStartDay();
+    const d = date || new Date();
+    let start, end;
+    if (msd === 1) {
+        // Standard calendar month
+        start = new Date(d.getFullYear(), d.getMonth(), 1);
+        end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    } else {
+        if (d.getDate() >= msd) {
+            start = new Date(d.getFullYear(), d.getMonth(), msd);
+            end = new Date(d.getFullYear(), d.getMonth() + 1, msd - 1);
+        } else {
+            start = new Date(d.getFullYear(), d.getMonth() - 1, msd);
+            end = new Date(d.getFullYear(), d.getMonth(), msd - 1);
+        }
+    }
+    const fmt = (dt) => dt.toISOString().substring(0, 10);
+    return { start: fmt(start), end: fmt(end), startDate: start, endDate: end };
+}
+
+function getCustomMonthLabel(date) {
+    const range = getCustomMonthRange(date);
+    const msd = getMonthStartDay();
+    // Label by the month the period mostly falls in
+    const midDate = new Date((new Date(range.start).getTime() + new Date(range.end).getTime()) / 2);
+    const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    if (msd === 1) return `${names[midDate.getMonth()]} ${midDate.getFullYear()}`;
+    return `${names[midDate.getMonth()]} ${midDate.getFullYear()} (${msd}th–${msd - 1}${msd - 1 === 1 ? 'st' : msd - 1 === 2 ? 'nd' : msd - 1 === 3 ? 'rd' : 'th'})`;
+}
 
 function getFilteredTransactions() {
     let txs = store.transactions;
     if (currentAccount !== 'all') {
         txs = txs.filter(t => t.account === currentAccount);
     }
-    if (activeFilter.type === 'months' && activeFilter.months.length > 0) {
+    if (activeFilter.type === 'currentMonth') {
+        const range = getCustomMonthRange(new Date());
+        txs = txs.filter(t => t.date && t.date >= range.start && t.date <= range.end);
+    } else if (activeFilter.type === 'months' && activeFilter.months.length > 0) {
         const set = new Set(activeFilter.months);
         txs = txs.filter(t => t.date && set.has(t.date.substring(0, 7)));
     } else if (activeFilter.type === 'dateRange' && activeFilter.dateFrom && activeFilter.dateTo) {
@@ -2949,7 +3003,9 @@ function setFilterPreset(preset) {
     document.getElementById('filterDateFrom').value = '';
     document.getElementById('filterDateTo').value = '';
 
-    if (preset === 'all') {
+    if (preset === 'currentMonth') {
+        activeFilter.type = 'currentMonth';
+    } else if (preset === 'all') {
         activeFilter.type = 'all';
     } else {
         const now = new Date();
@@ -2969,8 +3025,10 @@ function setFilterPreset(preset) {
     }
 
     // Update quick select visuals
+    const presetMap = { currentMonth: 'this month', all: 'all time', ytd: 'year', last3: '3', last6: '6' };
+    const match = (presetMap[preset] || '').toLowerCase();
     document.querySelectorAll('.filter-quick-btns .filter-chip').forEach(b => {
-        b.classList.toggle('active', b.textContent.toLowerCase().includes(preset === 'all' ? 'all' : preset === 'ytd' ? 'year' : preset === 'last3' ? '3' : '6'));
+        b.classList.toggle('active', b.textContent.toLowerCase().includes(match));
     });
 
     buildFilterMonths();
@@ -3003,7 +3061,9 @@ function clearFilter() {
 
 function updateFilterLabel() {
     const label = document.getElementById('filterLabel');
-    if (activeFilter.type === 'all') {
+    if (activeFilter.type === 'currentMonth') {
+        label.textContent = getCustomMonthLabel(new Date());
+    } else if (activeFilter.type === 'all') {
         label.textContent = 'All Time';
     } else if (activeFilter.type === 'dateRange') {
         label.textContent = `${formatDate(activeFilter.dateFrom)} - ${formatDate(activeFilter.dateTo)}`;
@@ -3184,7 +3244,11 @@ function renderCategoryChart(debits) {
             const tree = CATEGORY_TREE[l];
             return tree ? tree.color : (CAT_COLORS[l] || '#636e72');
         });
-        chartLabels = labels.map(l => `${getCatEmoji(l)} ${l}`);
+        const total1 = data.reduce((a,b) => a+b, 0);
+        chartLabels = labels.map((l, i) => {
+            const pct = total1 > 0 ? ((data[i]/total1)*100).toFixed(1) : '0.0';
+            return `${getCatEmoji(l)} ${l} (${pct}%)`;
+        });
     } else {
         // Show sub-categories for a specific parent
         const children = getChildCategories(chartViewLevel);
@@ -3198,7 +3262,11 @@ function renderCategoryChart(debits) {
             const all = getAllCategories();
             return (all[l] && all[l].color) || CAT_COLORS[l] || '#636e72';
         });
-        chartLabels = labels.map(l => `${getCatEmoji(l)} ${l}`);
+        const total2 = data.reduce((a,b) => a+b, 0);
+        chartLabels = labels.map((l, i) => {
+            const pct = total2 > 0 ? ((data[i]/total2)*100).toFixed(1) : '0.0';
+            return `${getCatEmoji(l)} ${l} (${pct}%)`;
+        });
     }
 
     // Show back button when drilling into sub-categories
@@ -3485,6 +3553,7 @@ function renderBudgetBars(debits) {
     const budgets = store.budgets || {};
     // Show parent-level totals with expandable children
     const parentTotals = aggregateByParent(catTotals);
+    const grandTotal = Object.values(parentTotals).reduce((s,v) => s + v, 0) || 1;
 
     const html = Object.entries(CATEGORY_TREE)
         .filter(([name]) => name !== 'Income' && name !== 'Transfers')
@@ -3494,6 +3563,7 @@ function renderBudgetBars(debits) {
             if (spent === 0 && budget === 0) return '';
 
             const pct = budget > 0 ? Math.min((spent / budget) * 100, 150) : 0;
+            const spendPct = ((spent / grandTotal) * 100).toFixed(1);
             const barClass = budget === 0 ? 'ok' : pct > 100 ? 'over' : pct > 80 ? 'warn' : 'ok';
             const overAmount = budget > 0 && spent > budget ? spent - budget : 0;
 
@@ -3504,9 +3574,10 @@ function renderBudgetBars(debits) {
                 const childRows = children.map(c => {
                     const cSpent = catTotals[c] || 0;
                     if (cSpent === 0) return '';
+                    const cPct = ((cSpent / grandTotal) * 100).toFixed(1);
                     return `<div class="budget-child" onclick="openCategoryDrilldown('${c}')" style="padding:4px 0 4px 20px;display:flex;justify-content:space-between;cursor:pointer;font-size:0.8rem;color:var(--text-dim)">
                         <span>${getCatEmoji(c)} ${c}</span>
-                        <span>£${cSpent.toFixed(0)}</span>
+                        <span>£${cSpent.toFixed(0)} <span style="opacity:0.6;font-size:0.7rem">${cPct}%</span></span>
                     </div>`;
                 }).filter(Boolean).join('');
                 if (childRows) {
@@ -3524,6 +3595,7 @@ function renderBudgetBars(debits) {
                         </div>
                         <div class="budget-amounts">
                             <span class="spent">£${spent.toFixed(0)}</span>
+                            <span style="color:var(--text-dim);font-size:0.75rem;margin-left:4px">${spendPct}%</span>
                             ${budget > 0 ? ` / £${budget.toFixed(0)}` : ''}
                             ${overAmount > 0 ? `<span class="overspend-badge">+£${overAmount.toFixed(0)} over</span>` : ''}
                         </div>
@@ -4101,7 +4173,9 @@ function updateCategory(id, newCat) {
                 name1: store.settings.name1,
                 name2: store.settings.name2,
                 nameJoint: store.settings.nameJoint,
-                customRules: store.settings.customRules
+                customRules: store.settings.customRules,
+                paydayDate: store.settings.paydayDate,
+                monthStartDay: store.settings.monthStartDay
             }
         });
     }
@@ -4203,6 +4277,7 @@ function openSettings() {
     document.getElementById('name2').value = store.settings.name2;
     document.getElementById('nameJoint').value = store.settings.nameJoint;
     document.getElementById('paydayDate').value = store.settings.paydayDate || '';
+    document.getElementById('monthStartDay').value = store.settings.monthStartDay || '';
 
     // Render custom categories list
     renderCustomCatList();
@@ -4239,6 +4314,8 @@ function saveSettings() {
     store.settings.nameJoint = document.getElementById('nameJoint').value || 'Joint';
     const paydayVal = parseInt(document.getElementById('paydayDate').value);
     store.settings.paydayDate = (paydayVal >= 1 && paydayVal <= 31) ? paydayVal : null;
+    const msdVal = parseInt(document.getElementById('monthStartDay').value);
+    store.settings.monthStartDay = (msdVal >= 1 && msdVal <= 31) ? msdVal : 1;
 
     // Save custom rules
     const allCats = Object.keys(CATEGORIES).filter(c => c !== 'Other');
@@ -4268,7 +4345,9 @@ function saveSettings() {
                 name1: store.settings.name1,
                 name2: store.settings.name2,
                 nameJoint: store.settings.nameJoint,
-                customRules: store.settings.customRules
+                customRules: store.settings.customRules,
+                paydayDate: store.settings.paydayDate,
+                monthStartDay: store.settings.monthStartDay
             }
         });
     }
