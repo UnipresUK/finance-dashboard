@@ -71,12 +71,33 @@
             color: white;
         }
         .account-tab:hover:not(.active) { color: var(--text); }
+        .account-tab .tab-updated {
+            display: block;
+            font-size: 0.6rem;
+            font-weight: 400;
+            opacity: 0.7;
+            margin-top: 2px;
+        }
+        .account-tab.active .tab-updated { opacity: 0.85; }
+        .account-tab.stale .tab-updated { color: var(--orange); opacity: 1; }
 
         .header-actions {
             display: flex;
             gap: 8px;
             align-items: center;
+            flex-wrap: wrap;
         }
+        .btn-lloyds {
+            background: #024731 !important;
+            color: #fff !important;
+            border: none !important;
+            font-size: 0.8rem;
+            padding: 6px 12px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .btn-lloyds:hover { background: #036b4a !important; }
 
         /* Month selector */
         .month-selector {
@@ -1212,6 +1233,9 @@
         </button>
         <button class="btn btn-outline" onclick="openSettings()">Settings</button>
         <button class="btn btn-outline" onclick="openBudgets()">Budgets</button>
+        <a class="btn btn-lloyds" href="https://www.lloydsbank.com/online-banking/login" target="_blank" rel="noopener" title="Open Lloyds Online Banking to download CSV">
+            🏦 Lloyds Bank
+        </a>
         <label class="btn btn-primary">
             Upload CSV
             <input type="file" accept=".csv" multiple hidden onchange="handleFileUpload(event)">
@@ -1255,11 +1279,16 @@
     <div id="emptyState">
         <div class="upload-zone" id="dropZone">
             <h3>Drop your Lloyds Bank CSV files here</h3>
-            <p>Or click to browse. Upload statements for each account separately.</p>
+            <p>Or click to browse. You can drop <strong>multiple files at once</strong> — you'll assign each to an account.</p>
             <p style="margin-top:12px;font-size:0.8rem;color:var(--text-dim)">
                 Supports Lloyds Bank CSV export format<br>
-                Select which account each file belongs to after uploading
+                Duplicates are automatically detected
             </p>
+            <a href="https://www.lloydsbank.com/online-banking/login" target="_blank" rel="noopener"
+               onclick="event.stopPropagation()"
+               style="display:inline-block;margin-top:12px;padding:8px 16px;background:#024731;color:#fff;border-radius:8px;text-decoration:none;font-size:0.85rem">
+                🏦 Open Lloyds to Download CSVs
+            </a>
         </div>
     </div>
 
@@ -3068,10 +3097,57 @@ function getDaysInRange(txs) {
     return Math.max(1, Math.round(range));
 }
 
+function getAccountLastDate(accountKey) {
+    const acctTxs = store.transactions.filter(t => t.account === accountKey);
+    if (acctTxs.length === 0) return null;
+    // Find the most recent transaction date
+    let latest = '';
+    acctTxs.forEach(t => {
+        const d = String(t.date || '').substring(0, 10);
+        if (d > latest) latest = d;
+    });
+    return latest || null;
+}
+
+function formatRelativeDate(dateStr) {
+    if (!dateStr) return 'No data';
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffDays = Math.floor((now - d) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays <= 7) return `${diffDays}d ago`;
+    if (diffDays <= 30) return `${Math.floor(diffDays / 7)}w ago`;
+    return `${Math.floor(diffDays / 30)}mo ago`;
+}
+
 function updateAccountTabLabels() {
-    document.querySelector('[data-account="person1"]').textContent = store.settings.name1;
-    document.querySelector('[data-account="person2"]').textContent = store.settings.name2;
-    document.querySelector('[data-account="joint"]').textContent = store.settings.nameJoint;
+    const accounts = [
+        { key: 'person1', name: store.settings.name1 },
+        { key: 'person2', name: store.settings.name2 },
+        { key: 'joint', name: store.settings.nameJoint }
+    ];
+
+    accounts.forEach(acc => {
+        const tab = document.querySelector(`[data-account="${acc.key}"]`);
+        if (!tab) return;
+        const lastDate = getAccountLastDate(acc.key);
+        const relative = formatRelativeDate(lastDate);
+        const now = new Date();
+        const diffDays = lastDate ? Math.floor((now - new Date(lastDate)) / (1000 * 60 * 60 * 24)) : 999;
+        const isStale = diffDays > 7;
+        tab.classList.toggle('stale', isStale && lastDate !== null);
+        tab.innerHTML = `${acc.name}<span class="tab-updated">${lastDate ? relative : 'No data'}</span>`;
+    });
+
+    // All accounts tab — show overall last date
+    const allTab = document.querySelector('[data-account="all"]');
+    if (allTab) {
+        const allDates = ['person1', 'person2', 'joint'].map(k => getAccountLastDate(k)).filter(Boolean);
+        const oldest = allDates.length > 0 ? allDates.sort()[0] : null;
+        const relative = oldest ? 'Oldest: ' + formatRelativeDate(oldest) : '';
+        allTab.innerHTML = `All Accounts${relative ? `<span class="tab-updated">${relative}</span>` : ''}`;
+    }
 }
 
 function formatMonth(ym) {
@@ -4260,6 +4336,15 @@ function showToast(msg, type, duration = 3000) {
 
 // ===================== DRAG & DROP =====================
 const dropZone = document.getElementById('dropZone');
+if (dropZone) {
+    dropZone.addEventListener('click', (e) => {
+        if (e.target.tagName === 'A') return; // don't intercept Lloyds link
+        const inp = document.createElement('input');
+        inp.type = 'file'; inp.accept = '.csv'; inp.multiple = true;
+        inp.onchange = (ev) => { if (ev.target.files.length) processFiles(Array.from(ev.target.files)); };
+        inp.click();
+    });
+}
 document.addEventListener('dragover', e => { e.preventDefault(); dropZone?.classList.add('dragover'); });
 document.addEventListener('dragleave', () => dropZone?.classList.remove('dragover'));
 document.addEventListener('drop', e => {
