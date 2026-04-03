@@ -3846,12 +3846,15 @@ function confirmNewCategory() {
 
     // Apply to the pending transaction immediately
     const txId = pendingNewCatTxId;
+    console.log('[NewCat] Created:', name, 'Parent:', parentName, 'Pending TX:', txId);
     document.getElementById('newCatModal').classList.remove('show');
     pendingNewCatTxId = null;
 
     if (txId) {
+        console.log('[NewCat] Calling updateCategory with:', txId, name);
         updateCategory(txId, name);
     } else {
+        console.log('[NewCat] No pending TX, just saving');
         saveStore();
         try { renderDashboard(); } catch(e) { console.error(e); }
     }
@@ -3859,7 +3862,12 @@ function confirmNewCategory() {
 
 function updateCategory(id, newCat) {
     const tx = store.transactions.find(t => t.id === id);
-    if (!tx) return;
+    if (!tx) {
+        console.error('[updateCategory] Transaction not found:', id, 'Store has', store.transactions.length, 'transactions');
+        console.log('[updateCategory] First 3 IDs:', store.transactions.slice(0,3).map(t => t.id));
+        showToast('Transaction not found — try refreshing', 'error');
+        return;
+    }
 
     // Handle "new category" option — open modal
     if (newCat === '__new__') {
