@@ -1942,9 +1942,10 @@ async function changePinSubmit() {
 
 // ===================== GOOGLE SHEETS API =====================
 const API_URL_KEY = 'financeDashboard_apiUrl';
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbxovZnSShFYkwhmDh25YatwusXjaiqj_tIea9J4jLD14prwVvKcxUuHnFQjYtuw774K/exec';
 
 function getApiUrl() {
-    return localStorage.getItem(API_URL_KEY) || '';
+    return localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL;
 }
 
 function setApiUrl(url) {
