@@ -1714,6 +1714,8 @@ async function syncFromSheet() {
             store.settings.customCategories = cc;
         }
 
+        // Migrate old categories to new hierarchy
+        migrateCategories();
         saveStoreEncrypted();
         try { renderDashboard(); } catch(e) { console.error('[SYNC] Render error:', e); }
 
@@ -1947,6 +1949,70 @@ function aggregateByParent(catTotals) {
 // Helper: is this a parent-level category?
 function isParentCategory(cat) {
     return CATEGORY_TREE.hasOwnProperty(cat);
+}
+
+// Migration: map old category names to new sub-categories
+const CATEGORY_MIGRATION = {
+    'Bills & Utilities': null,  // null = re-categorize from description keywords
+    'Health & Beauty': null,
+    'Subscriptions': null,      // now a parent, children handle keywords
+    'Eating Out': null,
+    'Shopping': null,
+    'Entertainment': null,
+    'Transport': null,
+    'Groceries': null
+};
+
+function migrateCategories() {
+    if (!store.transactions || store.transactions.length === 0) return;
+    let migrated = 0;
+    const allCats = getAllCategories();
+
+    // First migrate custom rules: move rules from old category names
+    const oldToParent = {
+        'Bills & Utilities': 'Bills',
+        'Health & Beauty': 'Health & Beauty'
+    };
+    if (store.settings.customRules) {
+        const rules = store.settings.customRules;
+        for (const [oldName, newParent] of Object.entries(oldToParent)) {
+            if (rules[oldName]) {
+                // Move keywords to the appropriate new category
+                rules[oldName].forEach(kw => {
+                    // Try to find which sub-category this keyword belongs to
+                    const newCat = categorize(kw);
+                    if (newCat !== 'Other') {
+                        if (!rules[newCat]) rules[newCat] = [];
+                        if (!rules[newCat].includes(kw)) rules[newCat].push(kw);
+                    }
+                });
+                delete rules[oldName];
+            }
+        }
+    }
+
+    store.transactions.forEach(t => {
+        // If category doesn't exist in current system, re-categorize
+        if (t.category && !allCats[t.category]) {
+            const newCat = categorize(String(t.description || ''));
+            t.category = newCat;
+            migrated++;
+        }
+        // If category is a parent that has children, try to assign to a child
+        if (t.category && CATEGORY_TREE[t.category] && Object.keys(CATEGORY_TREE[t.category].children || {}).length > 0) {
+            const newCat = categorize(String(t.description || ''));
+            // Only reassign if categorize found a specific sub-category (not just 'Other')
+            if (newCat !== 'Other' && newCat !== t.category) {
+                t.category = newCat;
+                migrated++;
+            }
+        }
+    });
+
+    if (migrated > 0) {
+        console.log(`[MIGRATE] Re-categorized ${migrated} transactions to new sub-categories`);
+        saveStore();
+    }
 }
 
 const CUSTOM_CAT_COLORS = ['#e84393','#0984e3','#6c5ce7','#00b894','#fdcb6e','#e17055','#00cec9','#fab1a0','#74b9ff','#a29bfe','#55efc4','#ffeaa7','#dfe6e9','#b2bec3','#fd79a8','#636e72'];
