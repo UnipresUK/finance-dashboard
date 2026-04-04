@@ -2722,169 +2722,184 @@ async function parseLloydsPDF(arrayBuf, fileName) {
     }
 
     const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
-    const allLines = [];
+    const transactions = [];
 
     for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
-        // Group text items by Y position (same line)
+
+        // Step 1: Find column positions from the header row
+        // Headers: Date | Description | Type | Money In (£) | Money Out (£) | Balance (£)
+        let colPositions = null;
+        const items = content.items;
+
+        // Group items by Y (rounded to nearest 2px to merge same-line items)
         const lineMap = {};
-        content.items.forEach(item => {
-            const y = Math.round(item.transform[5]); // Y coordinate
+        items.forEach(item => {
+            const y = Math.round(item.transform[5] / 2) * 2;
             if (!lineMap[y]) lineMap[y] = [];
-            lineMap[y].push({ x: item.transform[4], text: item.str });
+            lineMap[y].push({ x: item.transform[4], text: item.str.trim(), width: item.width });
         });
-        // Sort lines top to bottom, items left to right
+
         const sortedYs = Object.keys(lineMap).map(Number).sort((a, b) => b - a);
-        sortedYs.forEach(y => {
-            const items = lineMap[y].sort((a, b) => a.x - b.x);
-            const lineText = items.map(i => i.text).join(' ').trim();
-            if (lineText) allLines.push({ y, text: lineText, items });
-        });
-    }
 
-    console.log('[PDF] Total text lines:', allLines.length);
-    console.log('[PDF] First 20 lines:', allLines.slice(0, 20).map(l => l.text));
-
-    const transactions = [];
-
-    // Lloyds PDF formats vary — try multiple patterns
-    // Pattern 1: "DD Mon YY" date format e.g. "03 Mar 25" or "3 Mar 25"
-    // Pattern 2: "DD/MM/YYYY" or "DD/MM/YY"
-    const datePatterns = [
-        /^(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{2,4})/i,
-        /^(\d{1,2}\/\d{1,2}\/\d{2,4})/
-    ];
-
-    // Amount pattern: matches numbers like 1,234.56 or 234.56
-    const amountRegex = /(\d{1,3}(?:,\d{3})*\.\d{2})/g;
-
-    for (let i = 0; i < allLines.length; i++) {
-        const line = allLines[i].text;
-
-        // Try each date pattern
-        let dateMatch = null;
-        for (const pat of datePatterns) {
-            dateMatch = line.match(pat);
-            if (dateMatch) break;
-        }
-        if (!dateMatch) continue;
-
-        const rawDate = dateMatch[1];
-        const parsedDate = parsePDFDate(rawDate);
-        if (!parsedDate) continue;
-
-        // Extract rest of line after date
-        let rest = line.substring(dateMatch[0].length).trim();
-
-        // Sometimes the next line is a continuation of the description
-        // Look ahead for lines that don't start with a date
-        let nextIdx = i + 1;
-        while (nextIdx < allLines.length) {
-            const nextLine = allLines[nextIdx].text;
-            let hasDate = false;
-            for (const pat of datePatterns) {
-                if (pat.test(nextLine)) { hasDate = true; break; }
-            }
-            if (hasDate) break;
-            // Skip header/footer lines
-            if (/^(Date|Description|Type|Amount|Balance|Page|Statement|Account|Sort|IBAN|BIC|Brought|Carried)/i.test(nextLine)) {
-                nextIdx++;
-                continue;
-            }
-            // If line has amounts, it might be part of this transaction
-            if (amountRegex.test(nextLine)) {
-                rest += ' ' + nextLine;
-                amountRegex.lastIndex = 0;
-                nextIdx++;
+        // Find header row by looking for "Money In" or "Money Out"
+        for (const y of sortedYs) {
+            const lineItems = lineMap[y].sort((a, b) => a.x - b.x);
+            const lineText = lineItems.map(i => i.text).join(' ');
+            if (/Money\s*(In|Out)/i.test(lineText) || /Date.*Description.*Type/i.test(lineText)) {
+                // Map column positions from header items
+                colPositions = { dateX: 0, descX: 0, typeX: 0, moneyInX: 0, moneyOutX: 0, balanceX: 0 };
+                lineItems.forEach(item => {
+                    const t = item.text.toLowerCase();
+                    if (t === 'date') colPositions.dateX = item.x;
+                    else if (t === 'description') colPositions.descX = item.x;
+                    else if (t === 'type') colPositions.typeX = item.x;
+                    else if (t.includes('money') && !colPositions._moneyFirst) {
+                        colPositions.moneyInX = item.x;
+                        colPositions._moneyFirst = true;
+                    }
+                    else if (t.includes('money')) colPositions.moneyOutX = item.x;
+                    else if (t.includes('in') && colPositions._moneyFirst && !colPositions._inDone) {
+                        colPositions._inDone = true; // "In" on same line after "Money"
+                    }
+                    else if (t.includes('out')) {
+                        // "Out" text — use previous "Money" x if moneyOut not set
+                    }
+                    else if (t === 'balance' || t.includes('balance')) colPositions.balanceX = item.x;
+                });
+                console.log('[PDF] Header found at Y:', y, 'Cols:', JSON.stringify(colPositions));
                 break;
             }
-            // Plain text continuation
-            rest += ' ' + nextLine;
-            nextIdx++;
-            // Don't look ahead more than 3 lines
-            if (nextIdx - i > 3) break;
         }
 
-        // Extract amounts from the combined text
-        const amounts = [];
-        let m;
-        const amtRegex2 = /(\d{1,3}(?:,\d{3})*\.\d{2})/g;
-        while ((m = amtRegex2.exec(rest)) !== null) {
-            amounts.push({ val: parseFloat(m[1].replace(/,/g, '')), idx: m.index });
+        // Fallback: if we didn't find headers, use approximate positions
+        if (!colPositions || (colPositions.moneyInX === 0 && colPositions.moneyOutX === 0)) {
+            // Try finding by looking for the actual "Money In" and "Money Out" text across all items
+            const moneyInItem = items.find(i => /Money\s*In/i.test(i.str));
+            const moneyOutItem = items.find(i => /Money\s*Out/i.test(i.str));
+            const balItem = items.find(i => /Balance/i.test(i.str) && !/^Balance on/i.test(i.str));
+            const dateItem = items.find(i => i.str.trim() === 'Date');
+            const descItem = items.find(i => i.str.trim() === 'Description');
+            const typeItem = items.find(i => i.str.trim() === 'Type');
+
+            colPositions = {
+                dateX: dateItem ? dateItem.transform[4] : 36,
+                descX: descItem ? descItem.transform[4] : 130,
+                typeX: typeItem ? typeItem.transform[4] : 310,
+                moneyInX: moneyInItem ? moneyInItem.transform[4] : 380,
+                moneyOutX: moneyOutItem ? moneyOutItem.transform[4] : 460,
+                balanceX: balItem ? balItem.transform[4] : 540
+            };
+            console.log('[PDF] Fallback column positions:', JSON.stringify(colPositions));
         }
 
-        if (amounts.length === 0) continue;
+        // Step 2: Parse transaction rows
+        // A transaction row starts with a date like "01 Apr 26"
+        const dateRegex = /^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{2,4})$/i;
 
-        // Description is everything before the first amount
-        let description = rest.substring(0, amounts[0].idx).trim();
-        // Clean up description
-        description = description.replace(/\s+/g, ' ').trim();
-        if (!description || description.length < 2) continue;
+        for (const y of sortedYs) {
+            const lineItems = lineMap[y].sort((a, b) => a.x - b.x);
 
-        // Determine transaction type from Lloyds keywords
-        const typeMatch = description.match(/^(DD|SO|BP|BGC|DEB|TFR|CPT|FPO|FPI|ATM|CHQ|DR|CR|POS|)[\s)]/i);
-        const txType = typeMatch ? typeMatch[1].toUpperCase() : '';
+            // Check if first item is a date
+            const firstItem = lineItems[0];
+            if (!firstItem) continue;
 
-        // Figure out debit vs credit
-        // Lloyds PDFs typically show: Description ... Debit ... Credit ... Balance
-        // Or sometimes: Description ... Amount ... Balance with type indicator
-        let amount;
-        if (amounts.length >= 3) {
-            // Likely: amount, (possibly another), balance
-            // The debit column comes before credit column
-            amount = -amounts[0].val; // default to debit
-            // Check if this looks like a credit (BGC, FPI = incoming)
-            if (/\b(BGC|FPI|CR|CREDIT|INTEREST|REFUND)\b/i.test(description)) {
-                amount = amounts[0].val;
+            // Build the date text — date might be split across items (e.g. "01" "Apr" "26")
+            let dateText = '';
+            let dateEndIdx = 0;
+            for (let i = 0; i < Math.min(lineItems.length, 4); i++) {
+                const candidate = (dateText + ' ' + lineItems[i].text).trim();
+                if (dateRegex.test(candidate)) {
+                    dateText = candidate;
+                    dateEndIdx = i + 1;
+                    break;
+                }
+                dateText = candidate;
             }
-        } else if (amounts.length === 2) {
-            // Amount and balance
-            amount = -amounts[0].val;
-            if (/\b(BGC|FPI|CR|CREDIT|INTEREST|REFUND)\b/i.test(description)) {
-                amount = amounts[0].val;
+
+            if (!dateRegex.test(dateText)) continue;
+
+            const dm = dateText.match(dateRegex);
+            const parsedDate = parsePDFDate(dateText);
+            if (!parsedDate) continue;
+
+            // Assign remaining items to columns by X position
+            let description = '';
+            let txType = '';
+            let moneyIn = 0;
+            let moneyOut = 0;
+            let balance = null;
+
+            // Calculate column boundaries (midpoints between column headers)
+            const midDescType = (colPositions.typeX + colPositions.descX) / 2;
+            const midTypeIn = colPositions.moneyInX > 0
+                ? (colPositions.typeX + colPositions.moneyInX) / 2
+                : colPositions.typeX + 50;
+            const midInOut = colPositions.moneyOutX > 0
+                ? (colPositions.moneyInX + colPositions.moneyOutX) / 2
+                : colPositions.moneyInX + 60;
+            const midOutBal = colPositions.balanceX > 0
+                ? (colPositions.moneyOutX + colPositions.balanceX) / 2
+                : colPositions.moneyOutX + 60;
+
+            for (let i = dateEndIdx; i < lineItems.length; i++) {
+                const item = lineItems[i];
+                const x = item.x;
+                const val = item.text.replace(/,/g, '');
+
+                if (x < midDescType) {
+                    // Description column
+                    description += (description ? ' ' : '') + item.text;
+                } else if (x < midTypeIn) {
+                    // Type column
+                    txType = item.text;
+                } else if (x < midInOut) {
+                    // Money In column
+                    const num = parseFloat(val);
+                    if (!isNaN(num)) moneyIn = num;
+                } else if (x < midOutBal) {
+                    // Money Out column
+                    const num = parseFloat(val);
+                    if (!isNaN(num)) moneyOut = num;
+                } else {
+                    // Balance column
+                    const num = parseFloat(val);
+                    if (!isNaN(num)) balance = num;
+                }
             }
-        } else {
-            // Single amount
-            amount = -amounts[0].val;
-            if (/\b(BGC|FPI|CR|CREDIT|INTEREST|REFUND)\b/i.test(description)) {
-                amount = amounts[0].val;
-            }
+
+            if (!description) continue;
+
+            const amount = moneyIn > 0 ? moneyIn : -moneyOut;
+
+            transactions.push({
+                id: crypto.randomUUID(),
+                date: parsedDate,
+                type: txType,
+                description: description,
+                amount: amount,
+                balance: balance,
+                category: null,
+                account: null
+            });
         }
-
-        const balance = amounts.length >= 2 ? amounts[amounts.length - 1].val : null;
-
-        // Remove type prefix from description for cleaner display
-        let cleanDesc = description;
-        if (txType) {
-            cleanDesc = description.replace(new RegExp('^' + txType + '[\\s)]*', 'i'), '').trim();
-        }
-        if (!cleanDesc) cleanDesc = description;
-
-        transactions.push({
-            id: crypto.randomUUID(),
-            date: parsedDate,
-            type: txType,
-            description: cleanDesc,
-            amount: amount,
-            balance: balance,
-            category: null,
-            account: null
-        });
     }
 
-    console.log('[PDF] Parsed transactions:', transactions.length);
+    console.log('[PDF] Parsed', transactions.length, 'transactions');
     if (transactions.length > 0) {
-        console.log('[PDF] First tx:', JSON.stringify(transactions[0]));
-        console.log('[PDF] Last tx:', JSON.stringify(transactions[transactions.length - 1]));
+        console.log('[PDF] Sample:', transactions.slice(0, 3).map(t =>
+            `${t.date} | ${t.description} | ${t.type} | £${t.amount} | bal:${t.balance}`
+        ));
     }
 
+    // Sort by date ascending
+    transactions.sort((a, b) => a.date.localeCompare(b.date));
     return transactions;
 }
 
 function parsePDFDate(raw) {
-    // "03 Mar 25" or "3 Mar 2025"
-    const m1 = raw.match(/^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{2,4})$/i);
+    const m1 = raw.match(/(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{2,4})/i);
     if (m1) {
         const day = m1[1].padStart(2, '0');
         const months = { jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12' };
@@ -2893,8 +2908,7 @@ function parsePDFDate(raw) {
         if (year.length === 2) year = (parseInt(year) > 50 ? '19' : '20') + year;
         return `${year}-${mon}-${day}`;
     }
-    // "03/03/2025" or "03/03/25"
-    const m2 = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    const m2 = raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
     if (m2) {
         const day = m2[1].padStart(2, '0');
         const mon = m2[2].padStart(2, '0');
