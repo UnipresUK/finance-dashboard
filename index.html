@@ -5477,8 +5477,7 @@ function renderRecurringPayments() {
                 <span class="recurring-item-freq">${r.frequency}<br><span style="font-size:0.7rem">Next: ${nextStr}</span></span>
                 <span class="recurring-item-amount">£${r.amount.toFixed(2)}</span>
                 <button onclick="toggleLabelPicker('${safeName}')" title="Add label" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:0.75rem;padding:2px 6px;border-radius:4px;white-space:nowrap">🏷</button>
-                <button onclick="confirmDeleteRecurring('${safeName}')" title="Delete all transactions" style="background:none;border:1px solid var(--red);color:var(--red);cursor:pointer;font-size:0.75rem;padding:2px 6px;border-radius:4px;white-space:nowrap">🗑</button>
-                <button onclick="dismissRecurring('${safeName}')" title="Hide" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1rem;padding:0 2px;line-height:1">✕</button>
+                <button onclick="dismissRecurring('${safeName}')" title="Remove from list" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1rem;padding:0 4px;line-height:1">✕</button>
             </div>
         `;
     }).join('');
@@ -5500,23 +5499,6 @@ function dismissRecurringFlag(name, flag) {
     renderRecurringPayments();
 }
 
-function confirmDeleteRecurring(name) {
-    const txs = store.transactions.filter(t => getMerchantName(t.description) === name);
-    if (!txs.length) { showToast('No transactions found for ' + name, 'error'); return; }
-    if (!confirm(`Delete all ${txs.length} transactions for "${name}"? This cannot be undone.`)) return;
-    deleteRecurringTransactions(name);
-}
-
-async function deleteRecurringTransactions(name) {
-    const ids = store.transactions.filter(t => getMerchantName(t.description) === name).map(t => t.id);
-    store.transactions = store.transactions.filter(t => getMerchantName(t.description) !== name);
-    await saveStore();
-    showToast(`Deleted ${ids.length} transactions for "${name}"`, 'success');
-    if (getApiUrl()) {
-        apiCall('deleteTransactions', { ids });
-    }
-    renderDashboard();
-}
 
 // ===================== SAVINGS GOALS =====================
 function openSavingsGoalModal(index) {
