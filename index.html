@@ -2235,6 +2235,21 @@ function txHash(tx) {
     return 'h' + Math.abs(hash).toString(16);
 }
 
+function buildSettingsPayload() {
+    return {
+        name1: store.settings.name1,
+        name2: store.settings.name2,
+        nameJoint: store.settings.nameJoint,
+        customRules: store.settings.customRules,
+        paydayDate: store.settings.paydayDate,
+        monthStartDay: store.settings.monthStartDay,
+        dismissedRecurring: store.settings.dismissedRecurring || [],
+        recurringLabels: store.settings.recurringLabels || {},
+        recurringIgnoredFlags: store.settings.recurringIgnoredFlags || {},
+        savingsGoals: store.settings.savingsGoals || []
+    };
+}
+
 async function syncFromSheet() {
     const url = getApiUrl();
     if (!url) {
@@ -2309,6 +2324,20 @@ async function syncFromSheet() {
                 store.settings.monthStartDay = typeof data.settings.monthStartDay === 'string'
                     ? parseInt(data.settings.monthStartDay) : data.settings.monthStartDay;
             }
+            // Recurring & savings settings — parse JSON if stored as string
+            const parseJsonSetting = (v, fallback) => {
+                if (v === undefined || v === null || v === '') return fallback;
+                if (typeof v === 'string') { try { return JSON.parse(v); } catch(_) { return fallback; } }
+                return v;
+            };
+            const sheetDismissed = parseJsonSetting(data.settings.dismissedRecurring, null);
+            if (sheetDismissed) store.settings.dismissedRecurring = sheetDismissed;
+            const sheetLabels = parseJsonSetting(data.settings.recurringLabels, null);
+            if (sheetLabels) store.settings.recurringLabels = sheetLabels;
+            const sheetFlags = parseJsonSetting(data.settings.recurringIgnoredFlags, null);
+            if (sheetFlags) store.settings.recurringIgnoredFlags = sheetFlags;
+            const sheetGoals = parseJsonSetting(data.settings.savingsGoals, null);
+            if (sheetGoals) store.settings.savingsGoals = sheetGoals;
         }
 
         // Merge custom categories
@@ -2317,7 +2346,12 @@ async function syncFromSheet() {
             data.customCategories.forEach(c => {
                 const ck = {};
                 Object.keys(c).forEach(k => ck[k.toLowerCase()] = c[k]);
-                cc[ck.name] = { color: ck.color, keywords: ck.keywords ? ck.keywords.split(',').map(s=>s.trim()).filter(Boolean) : [] };
+                cc[ck.name] = {
+                    color: ck.color,
+                    keywords: ck.keywords ? ck.keywords.split(',').map(s=>s.trim()).filter(Boolean) : [],
+                    emoji: ck.emoji || '',
+                    parent: ck.parent || null
+                };
             });
             store.settings.customCategories = cc;
         }
@@ -2386,7 +2420,13 @@ async function uploadAllToSheet() {
             name1: store.settings.name1,
             name2: store.settings.name2,
             nameJoint: store.settings.nameJoint,
-            customRules: store.settings.customRules
+            customRules: store.settings.customRules,
+            paydayDate: store.settings.paydayDate,
+            monthStartDay: store.settings.monthStartDay,
+            dismissedRecurring: store.settings.dismissedRecurring || [],
+            recurringLabels: store.settings.recurringLabels || {},
+            recurringIgnoredFlags: store.settings.recurringIgnoredFlags || {},
+            savingsGoals: store.settings.savingsGoals || []
         }
     });
 
@@ -2396,7 +2436,9 @@ async function uploadAllToSheet() {
         await apiCall('saveCustomCategory', {
             name,
             color: info.color,
-            keywords: (info.keywords || []).join(',')
+            keywords: (info.keywords || []).join(','),
+            emoji: info.emoji || '',
+            parent: info.parent || ''
         });
     }
 }
@@ -4595,16 +4637,7 @@ async function updateCategory(id, newCat) {
     // Sync to sheet
     if (getApiUrl()) {
         apiCall('bulkUpdateCategory', { ids: updatedIds, category: newCat, merchantName });
-        apiCall('saveSettings', {
-            settings: {
-                name1: store.settings.name1,
-                name2: store.settings.name2,
-                nameJoint: store.settings.nameJoint,
-                customRules: store.settings.customRules,
-                paydayDate: store.settings.paydayDate,
-                monthStartDay: store.settings.monthStartDay
-            }
-        });
+        apiCall('saveSettings', { settings: buildSettingsPayload() });
     }
 }
 
@@ -4767,16 +4800,7 @@ function saveSettings() {
 
     // Sync settings to sheet
     if (getApiUrl()) {
-        apiCall('saveSettings', {
-            settings: {
-                name1: store.settings.name1,
-                name2: store.settings.name2,
-                nameJoint: store.settings.nameJoint,
-                customRules: store.settings.customRules,
-                paydayDate: store.settings.paydayDate,
-                monthStartDay: store.settings.monthStartDay
-            }
-        });
+        apiCall('saveSettings', { settings: buildSettingsPayload() });
     }
 }
 
@@ -5367,6 +5391,7 @@ function toggleRecurringLabel(name, label) {
     else labels.push(label);
     store.settings.recurringLabels[name] = labels;
     saveStore();
+    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
     renderRecurringPayments();
 }
 
@@ -5408,6 +5433,7 @@ function dismissRecurring(name) {
         store.settings.dismissedRecurring.push(name);
     }
     saveStore();
+    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
     renderRecurringPayments();
 }
 
@@ -5494,6 +5520,7 @@ function renderRecurringPayments() {
 function clearDismissedRecurring() {
     store.settings.dismissedRecurring = [];
     saveStore();
+    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
     renderRecurringPayments();
 }
 
@@ -5504,6 +5531,7 @@ function dismissRecurringFlag(name, flag) {
         store.settings.recurringIgnoredFlags[name].push(flag);
     }
     saveStore();
+    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
     renderRecurringPayments();
 }
 
@@ -5567,6 +5595,7 @@ function saveSavingsGoal() {
     }
 
     saveStore();
+    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
     closeSavingsGoalModal();
     renderSavingsGoals();
     showToast('Savings goal saved', 'success');
@@ -5576,6 +5605,7 @@ function deleteSavingsGoal(index) {
     if (!confirm('Delete this savings goal?')) return;
     store.settings.savingsGoals.splice(index, 1);
     saveStore();
+    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
     renderSavingsGoals();
     showToast('Goal removed', 'success');
 }
@@ -5587,6 +5617,7 @@ function updateGoalAmount(index, delta) {
     if (isNaN(amount)) return;
     goals[index].current = Math.max(0, (goals[index].current || 0) + amount);
     saveStore();
+    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
     renderSavingsGoals();
     showToast(`Updated: £${goals[index].current.toFixed(2)} saved`, 'success');
 }

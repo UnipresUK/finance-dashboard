@@ -290,12 +290,22 @@ function doSaveCustomCategory(p) {
     if (data[i][nameCol] === p.name) {
       if (p.color !== undefined) sheet.getRange(i + 1, findCol(headers,'color') + 1).setValue(p.color);
       if (p.keywords !== undefined) sheet.getRange(i + 1, findCol(headers,'keywords') + 1).setValue(p.keywords);
+      const emojiCol = findCol(headers,'emoji');
+      if (emojiCol >= 0 && p.emoji !== undefined) sheet.getRange(i + 1, emojiCol + 1).setValue(p.emoji);
+      const parentCol = findCol(headers,'parent');
+      if (parentCol >= 0 && p.parent !== undefined) sheet.getRange(i + 1, parentCol + 1).setValue(p.parent);
       return ok({ updated: true });
     }
   }
 
-  // Insert new
-  sheet.appendRow([uid(), p.name, p.color || '#e84393', p.keywords || '']);
+  // Insert new — sheet may or may not have emoji/parent columns; use findCol to be safe
+  const emojiCol = findCol(headers,'emoji');
+  const parentCol = findCol(headers,'parent');
+  if (emojiCol >= 0 && parentCol >= 0) {
+    sheet.appendRow([uid(), p.name, p.color || '#e84393', p.keywords || '', p.emoji || '', p.parent || '']);
+  } else {
+    sheet.appendRow([uid(), p.name, p.color || '#e84393', p.keywords || '']);
+  }
   return ok({ created: true });
 }
 
