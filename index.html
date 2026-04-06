@@ -2345,7 +2345,7 @@ function loadStore() {
 
 function saveStore() {
     // Save encrypted
-    saveStoreEncrypted();
+    return saveStoreEncrypted();
 }
 
 // ===================== CATEGORIES =====================
@@ -2723,89 +2723,126 @@ async function parseLloydsPDF(arrayBuf, fileName) {
 
     const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
     const transactions = [];
+    const dateRegex = /^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{2,4})$/i;
 
     for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
-
-        // Step 1: Find column positions from the header row
-        // Headers: Date | Description | Type | Money In (£) | Money Out (£) | Balance (£)
-        let colPositions = null;
         const items = content.items;
 
-        // Group items by Y (rounded to nearest 2px to merge same-line items)
+        // Group items by Y position (round to nearest 3px to merge same-line items)
         const lineMap = {};
         items.forEach(item => {
-            const y = Math.round(item.transform[5] / 2) * 2;
+            const y = Math.round(item.transform[5] / 3) * 3;
             if (!lineMap[y]) lineMap[y] = [];
             lineMap[y].push({ x: item.transform[4], text: item.str.trim(), width: item.width });
         });
 
         const sortedYs = Object.keys(lineMap).map(Number).sort((a, b) => b - a);
 
-        // Find header row by looking for "Money In" or "Money Out"
+        // ---- Step 1: Find column header positions ----
+        // Scan ALL items to find known header keywords and record their X positions.
+        // This handles split text like "Money" + "In" + "(£)" appearing as separate items.
+        let colPositions = null;
+        let headerY = null;
+
         for (const y of sortedYs) {
             const lineItems = lineMap[y].sort((a, b) => a.x - b.x);
+            // Reconstruct the full line text to check if this is a header row
             const lineText = lineItems.map(i => i.text).join(' ');
-            if (/Money\s*(In|Out)/i.test(lineText) || /Date.*Description.*Type/i.test(lineText)) {
-                // Map column positions from header items
-                colPositions = { dateX: 0, descX: 0, typeX: 0, moneyInX: 0, moneyOutX: 0, balanceX: 0 };
-                lineItems.forEach(item => {
-                    const t = item.text.toLowerCase();
-                    if (t === 'date') colPositions.dateX = item.x;
-                    else if (t === 'description') colPositions.descX = item.x;
-                    else if (t === 'type') colPositions.typeX = item.x;
-                    else if (t.includes('money') && !colPositions._moneyFirst) {
-                        colPositions.moneyInX = item.x;
-                        colPositions._moneyFirst = true;
+            if (!(/Date/i.test(lineText) && /Type/i.test(lineText))) continue;
+
+            // Log ALL items on this header row for debugging
+            console.log('[PDF] Header row items at Y=' + y + ':', JSON.stringify(lineItems.map(i => ({ x: Math.round(i.x), text: i.text }))));
+
+            // Build a combined text stream to find multi-word headers
+            // Walk through items left to right and identify column start positions
+            colPositions = { dateX: null, descX: null, typeX: null, moneyInX: null, moneyOutX: null, balanceX: null };
+            headerY = y;
+
+            // Strategy: concatenate consecutive items and look for known phrases
+            for (let i = 0; i < lineItems.length; i++) {
+                const t = lineItems[i].text;
+                const tl = t.toLowerCase();
+                const x = lineItems[i].x;
+
+                // Single-word exact matches
+                if (tl === 'date') { colPositions.dateX = x; continue; }
+                if (tl === 'description') { colPositions.descX = x; continue; }
+                if (tl === 'type') { colPositions.typeX = x; continue; }
+
+                // "Money In (£)" — could be one item or split as "Money" "In" "(£)"
+                // Look for "In (£)" or "In" preceded by money context
+                // Also handle single items like "Money In (£)"
+                if (/money\s*in/i.test(t) || /in\s*\(£\)/i.test(t)) {
+                    if (colPositions.moneyInX === null) colPositions.moneyInX = x;
+                    continue;
+                }
+                if (/money\s*out/i.test(t) || /out\s*\(£\)/i.test(t)) {
+                    if (colPositions.moneyOutX === null) colPositions.moneyOutX = x;
+                    continue;
+                }
+                if (/balance/i.test(t)) {
+                    colPositions.balanceX = x;
+                    continue;
+                }
+
+                // Handle split: look ahead to combine with next items
+                if (tl === 'money') {
+                    // Look at next item to determine if this is "Money In" or "Money Out"
+                    const next = i + 1 < lineItems.length ? lineItems[i + 1].text.toLowerCase() : '';
+                    if (/^in/.test(next) && colPositions.moneyInX === null) {
+                        colPositions.moneyInX = x;
+                    } else if (/^out/.test(next) && colPositions.moneyOutX === null) {
+                        colPositions.moneyOutX = x;
                     }
-                    else if (t.includes('money')) colPositions.moneyOutX = item.x;
-                    else if (t.includes('in') && colPositions._moneyFirst && !colPositions._inDone) {
-                        colPositions._inDone = true; // "In" on same line after "Money"
-                    }
-                    else if (t.includes('out')) {
-                        // "Out" text — use previous "Money" x if moneyOut not set
-                    }
-                    else if (t === 'balance' || t.includes('balance')) colPositions.balanceX = item.x;
-                });
-                console.log('[PDF] Header found at Y:', y, 'Cols:', JSON.stringify(colPositions));
-                break;
+                    continue;
+                }
+                // "In" or "(£)" fragments — skip, already handled via "Money" lookahead
+                if (tl === 'in' || tl === 'out' || tl === '(£)') continue;
             }
+
+            // If we found at least Date and one money column, we have a valid header
+            if (colPositions.dateX !== null) break;
+            colPositions = null;
         }
 
-        // Fallback: if we didn't find headers, use approximate positions
-        if (!colPositions || (colPositions.moneyInX === 0 && colPositions.moneyOutX === 0)) {
-            // Try finding by looking for the actual "Money In" and "Money Out" text across all items
-            const moneyInItem = items.find(i => /Money\s*In/i.test(i.str));
-            const moneyOutItem = items.find(i => /Money\s*Out/i.test(i.str));
-            const balItem = items.find(i => /Balance/i.test(i.str) && !/^Balance on/i.test(i.str));
-            const dateItem = items.find(i => i.str.trim() === 'Date');
-            const descItem = items.find(i => i.str.trim() === 'Description');
-            const typeItem = items.find(i => i.str.trim() === 'Type');
-
-            colPositions = {
-                dateX: dateItem ? dateItem.transform[4] : 36,
-                descX: descItem ? descItem.transform[4] : 130,
-                typeX: typeItem ? typeItem.transform[4] : 310,
-                moneyInX: moneyInItem ? moneyInItem.transform[4] : 380,
-                moneyOutX: moneyOutItem ? moneyOutItem.transform[4] : 460,
-                balanceX: balItem ? balItem.transform[4] : 540
-            };
-            console.log('[PDF] Fallback column positions:', JSON.stringify(colPositions));
+        // Fallback: scan all items individually for known column header text
+        if (!colPositions || colPositions.dateX === null) {
+            colPositions = { dateX: null, descX: null, typeX: null, moneyInX: null, moneyOutX: null, balanceX: null };
+            for (const item of items) {
+                const t = item.str.trim();
+                const tl = t.toLowerCase();
+                const x = item.transform[4];
+                if (tl === 'date' && colPositions.dateX === null) colPositions.dateX = x;
+                else if (tl === 'description' && colPositions.descX === null) colPositions.descX = x;
+                else if (tl === 'type' && colPositions.typeX === null) colPositions.typeX = x;
+                else if (/money\s*in|in\s*\(£\)/i.test(t) && colPositions.moneyInX === null) colPositions.moneyInX = x;
+                else if (/money\s*out|out\s*\(£\)/i.test(t) && colPositions.moneyOutX === null) colPositions.moneyOutX = x;
+                else if (/^balance\s*\(£\)$/i.test(t) && colPositions.balanceX === null) colPositions.balanceX = x;
+                else if (/^balance$/i.test(t) && colPositions.balanceX === null) colPositions.balanceX = x;
+            }
+            console.log('[PDF] Fallback column scan:', JSON.stringify(colPositions));
         }
 
-        // Step 2: Parse transaction rows
-        // A transaction row starts with a date like "01 Apr 26"
-        const dateRegex = /^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{2,4})$/i;
+        // Apply defaults for any columns still not found
+        if (colPositions.dateX === null) colPositions.dateX = 36;
+        if (colPositions.descX === null) colPositions.descX = colPositions.dateX + 80;
+        if (colPositions.typeX === null) colPositions.typeX = colPositions.descX + 180;
+        if (colPositions.moneyInX === null) colPositions.moneyInX = colPositions.typeX + 60;
+        if (colPositions.moneyOutX === null) colPositions.moneyOutX = colPositions.moneyInX + 70;
+        if (colPositions.balanceX === null) colPositions.balanceX = colPositions.moneyOutX + 70;
+
+        console.log('[PDF] Column positions:', JSON.stringify(colPositions));
+
+        // ---- Step 2: Parse transaction rows ----
+        let debugRowCount = 0;
 
         for (const y of sortedYs) {
             const lineItems = lineMap[y].sort((a, b) => a.x - b.x);
+            if (!lineItems.length) continue;
 
-            // Check if first item is a date
-            const firstItem = lineItems[0];
-            if (!firstItem) continue;
-
-            // Build the date text — date might be split across items (e.g. "01" "Apr" "26")
+            // Try to build a date from the leftmost items
             let dateText = '';
             let dateEndIdx = 0;
             for (let i = 0; i < Math.min(lineItems.length, 4); i++) {
@@ -2820,52 +2857,68 @@ async function parseLloydsPDF(arrayBuf, fileName) {
 
             if (!dateRegex.test(dateText)) continue;
 
-            const dm = dateText.match(dateRegex);
             const parsedDate = parsePDFDate(dateText);
             if (!parsedDate) continue;
 
-            // Assign remaining items to columns by X position
+            // Debug: log first 3 transaction rows
+            if (debugRowCount < 3) {
+                console.log('[PDF] Tx row ' + debugRowCount + ' at Y=' + y + ':', JSON.stringify(lineItems.map(i => ({ x: Math.round(i.x), text: i.text }))));
+                debugRowCount++;
+            }
+
+            // Assign remaining items to columns using closest-column approach
             let description = '';
             let txType = '';
             let moneyIn = 0;
             let moneyOut = 0;
             let balance = null;
 
-            // Calculate column boundaries (midpoints between column headers)
-            const midDescType = (colPositions.typeX + colPositions.descX) / 2;
-            const midTypeIn = colPositions.moneyInX > 0
-                ? (colPositions.typeX + colPositions.moneyInX) / 2
-                : colPositions.typeX + 50;
-            const midInOut = colPositions.moneyOutX > 0
-                ? (colPositions.moneyInX + colPositions.moneyOutX) / 2
-                : colPositions.moneyInX + 60;
-            const midOutBal = colPositions.balanceX > 0
-                ? (colPositions.moneyOutX + colPositions.balanceX) / 2
-                : colPositions.moneyOutX + 60;
+            // Numeric columns for closest-match assignment
+            const numericCols = [
+                { name: 'moneyIn', x: colPositions.moneyInX },
+                { name: 'moneyOut', x: colPositions.moneyOutX },
+                { name: 'balance', x: colPositions.balanceX }
+            ];
 
             for (let i = dateEndIdx; i < lineItems.length; i++) {
                 const item = lineItems[i];
                 const x = item.x;
-                const val = item.text.replace(/,/g, '');
+                const rawText = item.text;
+                const cleanVal = rawText.replace(/,/g, '');
+                const numVal = parseFloat(cleanVal);
+                const isNumeric = !isNaN(numVal) && /^[\d,.]+$/.test(rawText.replace(/\s/g, ''));
 
-                if (x < midDescType) {
-                    // Description column
-                    description += (description ? ' ' : '') + item.text;
-                } else if (x < midTypeIn) {
-                    // Type column
-                    txType = item.text;
-                } else if (x < midInOut) {
-                    // Money In column
-                    const num = parseFloat(val);
-                    if (!isNaN(num)) moneyIn = num;
-                } else if (x < midOutBal) {
-                    // Money Out column
-                    const num = parseFloat(val);
-                    if (!isNaN(num)) moneyOut = num;
+                if (isNumeric) {
+                    // Find closest numeric column by X position
+                    let closest = null;
+                    let closestDist = Infinity;
+                    for (const col of numericCols) {
+                        const dist = Math.abs(x - col.x);
+                        if (dist < closestDist) {
+                            closestDist = dist;
+                            closest = col.name;
+                        }
+                    }
+                    if (closest === 'moneyIn') moneyIn = numVal;
+                    else if (closest === 'moneyOut') moneyOut = numVal;
+                    else if (closest === 'balance') balance = numVal;
                 } else {
-                    // Balance column
-                    const num = parseFloat(val);
-                    if (!isNaN(num)) balance = num;
+                    // Text item — assign to Description or Type based on X position
+                    // Type column is usually narrow and to the right of description
+                    const distToDesc = Math.abs(x - colPositions.descX);
+                    const distToType = Math.abs(x - colPositions.typeX);
+
+                    if (distToType < distToDesc && rawText.length <= 5) {
+                        // Short text closer to Type column
+                        txType = rawText;
+                    } else if (x < colPositions.moneyInX) {
+                        // To the left of money columns — must be description or type
+                        if (x >= colPositions.typeX - 10 && rawText.length <= 5) {
+                            txType = rawText;
+                        } else {
+                            description += (description ? ' ' : '') + rawText;
+                        }
+                    }
                 }
             }
 
@@ -4345,7 +4398,7 @@ function confirmNewCategory() {
     }
 }
 
-function updateCategory(id, newCat) {
+async function updateCategory(id, newCat) {
     const tx = store.transactions.find(t => t.id === id);
     if (!tx) {
         console.error('[updateCategory] Transaction not found:', id, 'Store has', store.transactions.length, 'transactions');
@@ -4384,7 +4437,7 @@ function updateCategory(id, newCat) {
 
     showToast(`Updated ${matching.length} "${merchantName}" transaction${matching.length > 1 ? 's' : ''} → ${newCat}`, 'success');
 
-    saveStore();
+    await saveStore();
     try { renderDashboard(); } catch(e) { console.error('Render after category change:', e); renderTransactions(); }
 
     // Sync to sheet
