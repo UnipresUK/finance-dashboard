@@ -1019,6 +1019,55 @@
             background: rgba(253,203,110,0.15);
             color: var(--orange);
         }
+        .recurring-badge.custom {
+            background: rgba(108,92,231,0.15);
+            color: var(--accent-light);
+            cursor: pointer;
+        }
+        .recurring-badge.custom:hover { background: rgba(108,92,231,0.3); }
+        .recurring-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+        .recurring-tab {
+            padding: 5px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 500;
+            transition: all 0.15s;
+        }
+        .recurring-tab.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+        .recurring-tab:hover:not(.active) { border-color: var(--accent); color: var(--text); }
+        .label-picker {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding: 10px;
+            background: var(--bg);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            margin-top: 6px;
+        }
+        .label-picker-btn {
+            padding: 3px 10px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            background: var(--surface2);
+            color: var(--text-dim);
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+        .label-picker-btn:hover { border-color: var(--accent); color: var(--text); }
 
         /* ===== SAVINGS GOALS ===== */
         .savings-section {
@@ -1393,6 +1442,7 @@
             <div class="recurring-card">
                 <div class="card-title">Recurring Payments & Subscriptions</div>
                 <div class="recurring-total" id="recurringTotal"></div>
+                <div class="recurring-tabs" id="recurringTabs"></div>
                 <div class="recurring-list" id="recurringList"></div>
             </div>
         </div>
@@ -5249,13 +5299,74 @@ function detectRecurringPayments() {
             priceIncrease,
             review,
             count: txList.length,
-            category: sorted[sorted.length - 1].category || 'Other'
+            category: sorted[sorted.length - 1].category || 'Other',
+            txType: sorted[sorted.length - 1].type || ''
         });
     }
 
     // Sort by monthly cost descending
     recurring.sort((a, b) => b.monthlyCost - a.monthlyCost);
     return recurring;
+}
+
+// ===================== RECURRING PAYMENT LABELS =====================
+const PRESET_LABELS = ['Essential', 'Optional', 'Cancel?', 'Shared', 'Work', 'Personal'];
+let recurringActiveTab = 'all';
+
+function getRecurringType(r) {
+    // Determine which group a recurring payment belongs to
+    const type = (r.txType || '').toUpperCase();
+    const cat = (r.category || '').toLowerCase();
+    if (type === 'SO') return 'so';
+    if (type === 'DD') return 'dd';
+    if (cat.includes('subscri') || cat.includes('streaming') || cat.includes('gaming') || cat.includes('software') || cat.includes('membership')) return 'sub';
+    return 'other';
+}
+
+function getRecurringLabels(name) {
+    return (store.settings.recurringLabels || {})[name] || [];
+}
+
+function toggleRecurringLabel(name, label) {
+    if (!store.settings.recurringLabels) store.settings.recurringLabels = {};
+    const labels = store.settings.recurringLabels[name] || [];
+    const idx = labels.indexOf(label);
+    if (idx >= 0) labels.splice(idx, 1);
+    else labels.push(label);
+    store.settings.recurringLabels[name] = labels;
+    saveStore();
+    renderRecurringPayments();
+}
+
+function toggleLabelPicker(name) {
+    const id = 'lp_' + name.replace(/[^a-zA-Z0-9]/g, '_');
+    const existing = document.getElementById(id);
+    // Close any other open pickers first
+    document.querySelectorAll('.label-picker').forEach(el => {
+        if (el.id !== id) el.remove();
+    });
+    if (existing) { existing.remove(); return; }
+
+    const item = document.querySelector(`[data-recurring-name="${CSS.escape(name)}"]`);
+    if (!item) return;
+
+    const current = getRecurringLabels(name);
+    const picker = document.createElement('div');
+    picker.className = 'label-picker';
+    picker.id = id;
+    picker.innerHTML = '<span style="font-size:0.7rem;color:var(--text-dim);width:100%">Add / remove label:</span>' +
+        PRESET_LABELS.map(l => {
+            const active = current.includes(l);
+            return `<button class="label-picker-btn${active ? ' active' : ''}"
+                style="${active ? 'border-color:var(--accent);color:var(--accent-light);background:rgba(108,92,231,0.15)' : ''}"
+                onclick="toggleRecurringLabel('${name.replace(/'/g,"\\'")}','${l}')">${active ? '✓ ' : ''}${l}</button>`;
+        }).join('');
+    item.after(picker);
+}
+
+function setRecurringTab(tab) {
+    recurringActiveTab = tab;
+    renderRecurringPayments();
 }
 
 function dismissRecurring(name) {
@@ -5270,36 +5381,75 @@ function dismissRecurring(name) {
 function renderRecurringPayments() {
     const section = document.getElementById('recurringSection');
     const list = document.getElementById('recurringList');
+    const tabsEl = document.getElementById('recurringTabs');
     const totalEl = document.getElementById('recurringTotal');
     if (!section || !list) return;
 
     const dismissed = store.settings.dismissedRecurring || [];
-    const recurring = detectRecurringPayments().filter(r => !dismissed.includes(r.name));
+    const all = detectRecurringPayments().filter(r => !dismissed.includes(r.name));
 
-    if (recurring.length === 0) { section.style.display = 'none'; return; }
+    if (all.length === 0) { section.style.display = 'none'; return; }
     section.style.display = 'block';
 
-    const totalMonthly = recurring.reduce((s, r) => s + r.monthlyCost, 0);
+    // Count per tab
+    const counts = { all: all.length, dd: 0, so: 0, sub: 0, other: 0 };
+    all.forEach(r => { const t = getRecurringType(r); counts[t] = (counts[t] || 0) + 1; });
+
+    // Tab bar
+    const tabs = [
+        { key: 'all',   label: 'All' },
+        { key: 'dd',    label: 'Direct Debits' },
+        { key: 'so',    label: 'Standing Orders' },
+        { key: 'sub',   label: 'Subscriptions' },
+        { key: 'other', label: 'Other' },
+    ];
+    if (tabsEl) {
+        tabsEl.innerHTML = tabs
+            .filter(t => t.key === 'all' || counts[t.key] > 0)
+            .map(t => `<button class="recurring-tab${recurringActiveTab === t.key ? ' active' : ''}"
+                onclick="setRecurringTab('${t.key}')">
+                ${t.label}${t.key !== 'all' ? ` <span style="font-size:0.7rem;opacity:0.7">(${counts[t.key]})</span>` : ''}
+            </button>`).join('');
+    }
+
+    // Filter by active tab
+    const filtered = recurringActiveTab === 'all' ? all : all.filter(r => getRecurringType(r) === recurringActiveTab);
+
+    const totalMonthly = filtered.reduce((s, r) => s + r.monthlyCost, 0);
     const dismissedCount = dismissed.length;
-    totalEl.innerHTML = `Estimated monthly recurring: <span>£${totalMonthly.toFixed(2)}</span> across ${recurring.length} payments
+    totalEl.innerHTML = `Estimated monthly: <span>£${totalMonthly.toFixed(2)}</span> across ${filtered.length} payments
         ${dismissedCount > 0 ? `<button onclick="clearDismissedRecurring()" style="margin-left:8px;font-size:0.7rem;background:none;border:1px solid var(--border);color:var(--text-dim);border-radius:4px;padding:2px 6px;cursor:pointer">${dismissedCount} hidden — show all</button>` : ''}`;
 
-    list.innerHTML = recurring.map(r => {
+    list.innerHTML = filtered.map(r => {
         const emoji = getCatEmoji(r.category);
         const nextStr = r.nextDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-        let badges = '';
-        if (r.priceIncrease) badges += '<span class="recurring-badge increase">Price Increase</span>';
-        if (r.review) badges += '<span class="recurring-badge review">Review</span>';
         const safeName = r.name.replace(/'/g, "\\'");
+        const escapedName = r.name.replace(/"/g, '&quot;');
+        const customLabels = getRecurringLabels(r.name);
+
+        let badges = '';
+        if (r.priceIncrease) badges += '<span class="recurring-badge increase">↑ Price Increase</span>';
+        if (r.review)        badges += '<span class="recurring-badge review">Review</span>';
+        customLabels.forEach(l => {
+            badges += `<span class="recurring-badge custom" onclick="toggleRecurringLabel('${safeName}','${l}')" title="Click to remove">${l} ✕</span>`;
+        });
+
+        const typeTag = r.txType ? `<span style="font-size:0.65rem;color:var(--text-dim);padding:1px 5px;border:1px solid var(--border);border-radius:3px;margin-right:2px">${r.txType}</span>` : '';
 
         return `
-            <div class="recurring-item">
+            <div class="recurring-item" data-recurring-name="${escapedName}">
                 <span style="font-size:1.2rem">${emoji}</span>
-                <span class="recurring-item-name">${r.name}</span>
-                ${badges}
+                <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                        ${typeTag}
+                        <span class="recurring-item-name">${r.name}</span>
+                    </div>
+                    ${badges ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${badges}</div>` : ''}
+                </div>
                 <span class="recurring-item-freq">${r.frequency}<br><span style="font-size:0.7rem">Next: ${nextStr}</span></span>
                 <span class="recurring-item-amount">£${r.amount.toFixed(2)}</span>
-                <button onclick="dismissRecurring('${safeName}')" title="Hide this subscription" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1rem;padding:0 4px;line-height:1" aria-label="Dismiss">✕</button>
+                <button onclick="toggleLabelPicker('${safeName}')" title="Add label" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:0.75rem;padding:2px 6px;border-radius:4px;white-space:nowrap">🏷 Label</button>
+                <button onclick="dismissRecurring('${safeName}')" title="Hide" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1rem;padding:0 2px;line-height:1">✕</button>
             </div>
         `;
     }).join('');
