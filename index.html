@@ -2219,8 +2219,13 @@ async function apiCall(action, params = {}) {
 }
 
 // Hash for deduplication
+function normalizeDesc(desc) {
+    // Strip leading/trailing dots, spaces, and punctuation so PDF and CSV descriptions match
+    return String(desc || '').replace(/^[\s.,'"\-–—]+/, '').replace(/[\s.,'"\-–—]+$/, '').toUpperCase().replace(/\s+/g, ' ').trim();
+}
+
 function txHash(tx) {
-    const str = tx.date + '|' + tx.description + '|' + tx.amount + '|' + tx.account;
+    const str = tx.date + '|' + normalizeDesc(tx.description) + '|' + tx.amount + '|' + tx.account;
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
         const ch = str.charCodeAt(i);
@@ -3001,6 +3006,9 @@ async function parseLloydsPDF(arrayBuf, fileName) {
                     }
                 }
             }
+
+            // Strip leading dots/spaces that PDF extraction sometimes adds
+            description = description.replace(/^[\s.]+/, '').trim();
 
             if (!description) continue;
 
