@@ -1272,7 +1272,12 @@
             </div>
         </div>
         <div class="filter-section">
-            <h4>Months <button class="filter-chip-sm" onclick="toggleAllMonths()">Toggle All</button></h4>
+            <h4>Months <button class="filter-chip-sm" onclick="toggleAllMonths()">Toggle All</button>
+                <label style="font-size:0.7rem;color:var(--text-dim);margin-left:8px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">
+                    <input type="checkbox" id="useCustomMonthStart" onchange="rebuildFilterMonths()" style="width:12px;height:12px;accent-color:var(--accent)">
+                    Use 23rd start
+                </label>
+            </h4>
             <div class="filter-months-grid" id="filterMonthsGrid"></div>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
@@ -3197,8 +3202,15 @@ function getFilteredTransactions() {
         const range = getCustomMonthRange(new Date());
         txs = txs.filter(t => t.date && t.date >= range.start && t.date <= range.end);
     } else if (activeFilter.type === 'months' && activeFilter.months.length > 0) {
-        const set = new Set(activeFilter.months);
-        txs = txs.filter(t => t.date && set.has(t.date.substring(0, 7)));
+        const useCustom = document.getElementById('useCustomMonthStart')?.checked;
+        if (useCustom && Object.keys(customMonthRanges).length > 0) {
+            // Custom month ranges: union of all selected period date ranges
+            const ranges = activeFilter.months.map(k => customMonthRanges[k]).filter(Boolean);
+            txs = txs.filter(t => t.date && ranges.some(r => t.date >= r.start && t.date <= r.end));
+        } else {
+            const set = new Set(activeFilter.months);
+            txs = txs.filter(t => t.date && set.has(t.date.substring(0, 7)));
+        }
     } else if (activeFilter.type === 'dateRange' && activeFilter.dateFrom && activeFilter.dateTo) {
         txs = txs.filter(t => t.date && t.date >= activeFilter.dateFrom && t.date <= activeFilter.dateTo);
     }
@@ -3215,21 +3227,78 @@ function toggleFilterPanel() {
     }
 }
 
-function buildFilterMonths() {
-    const months = [...new Set(store.transactions.filter(t => t.date).map(t => t.date.substring(0, 7)))].sort().reverse();
-    const years = [...new Set(months.map(m => m.substring(0, 4)))].sort().reverse();
-    const grid = document.getElementById('filterMonthsGrid');
+// Custom month periods: each "month" chip maps to a date range (start→end)
+// when useCustomMonthStart is checked. Stored as 'YYYY-MM' key but filtered by date range.
+let customMonthRanges = {}; // key: 'YYYY-MM' label → { start, end } date strings
 
-    let html = '';
-    years.forEach(year => {
-        html += `<div style="width:100%;font-size:0.75rem;color:var(--text-dim);margin-top:8px;font-weight:600">${year}</div>`;
-        const yearMonths = months.filter(m => m.startsWith(year));
-        yearMonths.forEach(m => {
-            const active = activeFilter.months.includes(m) ? ' active' : '';
-            html += `<button class="filter-month-chip${active}" data-month="${m}" onclick="toggleMonth('${m}')">${formatMonth(m)}</button>`;
+function rebuildFilterMonths() {
+    // Clear any active month selections when toggling the mode
+    activeFilter.months = [];
+    activeFilter.type = 'all';
+    activeFilter.dateFrom = null;
+    activeFilter.dateTo = null;
+    buildFilterMonths();
+    renderDashboard();
+}
+
+function buildFilterMonths() {
+    const useCustom = document.getElementById('useCustomMonthStart')?.checked;
+    const msd = getMonthStartDay(); // e.g. 23
+    const months = [...new Set(store.transactions.filter(t => t.date).map(t => t.date.substring(0, 7)))].sort().reverse();
+    const grid = document.getElementById('filterMonthsGrid');
+    customMonthRanges = {};
+
+    if (useCustom && msd !== 1) {
+        // Build custom-period chips: each period = msd of one month → (msd-1) of next month
+        // Label the period by the month the start falls in
+        const periods = [];
+        const seen = new Set();
+        months.forEach(ym => {
+            // For each calendar month that has transactions, compute which custom period it belongs to
+            const [y, mo] = ym.split('-').map(Number);
+            // Two possible periods overlap this calendar month:
+            // Period A: starts msd of this month
+            // Period B: starts msd of previous month (ends msd-1 of this month)
+            [[y, mo], [mo === 1 ? y - 1 : y, mo === 1 ? 12 : mo - 1]].forEach(([py, pm]) => {
+                const key = `${py}-${String(pm).padStart(2, '0')}`;
+                if (seen.has(key)) return;
+                seen.add(key);
+                const start = `${py}-${String(pm).padStart(2, '0')}-${String(msd).padStart(2, '0')}`;
+                const endDate = new Date(py, pm, msd - 1); // pm = 0-indexed next month
+                const end = endDate.toISOString().substring(0, 10);
+                // Only include if any transaction falls in this range
+                if (store.transactions.some(t => t.date >= start && t.date <= end)) {
+                    const names = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                    const label = `${names[pm]} ${py}`;
+                    customMonthRanges[key] = { start, end, label };
+                    periods.push({ key, label, py, pm });
+                }
+            });
         });
-    });
-    grid.innerHTML = html;
+        periods.sort((a, b) => b.key.localeCompare(a.key));
+
+        const years = [...new Set(periods.map(p => p.py))].sort((a,b) => b - a);
+        let html = '';
+        years.forEach(year => {
+            html += `<div style="width:100%;font-size:0.75rem;color:var(--text-dim);margin-top:8px;font-weight:600">${year}</div>`;
+            periods.filter(p => p.py === year).forEach(p => {
+                const active = activeFilter.months.includes(p.key) ? ' active' : '';
+                html += `<button class="filter-month-chip${active}" data-month="${p.key}" onclick="toggleMonth('${p.key}')">${p.label}</button>`;
+            });
+        });
+        grid.innerHTML = html;
+    } else {
+        const years = [...new Set(months.map(m => m.substring(0, 4)))].sort().reverse();
+        let html = '';
+        years.forEach(year => {
+            html += `<div style="width:100%;font-size:0.75rem;color:var(--text-dim);margin-top:8px;font-weight:600">${year}</div>`;
+            months.filter(m => m.startsWith(year)).forEach(m => {
+                const active = activeFilter.months.includes(m) ? ' active' : '';
+                html += `<button class="filter-month-chip${active}" data-month="${m}" onclick="toggleMonth('${m}')">${formatMonth(m)}</button>`;
+            });
+        });
+        grid.innerHTML = html;
+    }
     updateFilterLabel();
 }
 
@@ -4760,13 +4829,83 @@ function renderCustomCatList() {
         el.innerHTML = '<p style="font-size:0.8rem;color:var(--text-dim)">No custom categories yet.</p>';
         return;
     }
-    el.innerHTML = entries.map(([name, info]) => `
-        <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
-            <span style="width:12px;height:12px;border-radius:50%;background:${info.color};display:inline-block"></span>
-            <span style="flex:1;font-size:0.9rem">${name}</span>
-            <button class="btn btn-outline btn-small" onclick="removeCustomCategory('${name.replace(/'/g, "\\'")}')" style="color:var(--red);border-color:var(--red)">Remove</button>
-        </div>
-    `).join('');
+
+    // Parent options for the dropdown
+    const parentOptions = Object.keys(CATEGORY_TREE)
+        .map(p => `<option value="${p}">${CATEGORY_TREE[p].emoji} ${p}</option>`)
+        .join('');
+
+    el.innerHTML = entries.map(([name, info]) => {
+        const safeName = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        const currentParent = info.parent || '';
+        const currentEmoji = info.emoji || '📌';
+        const idBase = name.replace(/[^a-zA-Z0-9]/g, '_');
+        return `
+        <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                <span style="font-size:1.1rem" id="emojiPreview_${idBase}">${currentEmoji}</span>
+                <span style="flex:1;font-weight:600;font-size:0.9rem">${name}</span>
+                <span style="font-size:0.75rem;color:var(--text-dim)">${currentParent ? '↳ ' + currentParent : 'Top-level'}</span>
+                <button class="btn btn-outline btn-small" onclick="removeCustomCategory('${safeName}')" style="color:var(--red);border-color:var(--red)">Remove</button>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <div style="display:flex;flex-direction:column;gap:2px;flex:1;min-width:120px">
+                    <label style="font-size:0.7rem;color:var(--text-dim)">Emoji</label>
+                    <input type="text" id="emoji_${idBase}" value="${currentEmoji}" maxlength="4"
+                        style="width:60px;padding:4px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:1rem;text-align:center"
+                        oninput="document.getElementById('emojiPreview_${idBase}').textContent=this.value||'📌'">
+                </div>
+                <div style="display:flex;flex-direction:column;gap:2px;flex:2;min-width:140px">
+                    <label style="font-size:0.7rem;color:var(--text-dim)">Parent category</label>
+                    <select id="parent_${idBase}" style="padding:4px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.8rem">
+                        <option value="">(None — top-level)</option>
+                        ${Object.keys(CATEGORY_TREE).map(p =>
+                            `<option value="${p}" ${p === currentParent ? 'selected' : ''}>${CATEGORY_TREE[p].emoji} ${p}</option>`
+                        ).join('')}
+                    </select>
+                </div>
+                <button class="btn btn-primary btn-small" style="align-self:flex-end" onclick="saveCustomCatEdit('${safeName}', '${idBase}')">Save</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function saveCustomCatEdit(name, idBase) {
+    const custom = store.settings.customCategories || {};
+    if (!custom[name]) return;
+    const newEmoji = document.getElementById('emoji_' + idBase)?.value.trim() || '📌';
+    const newParent = document.getElementById('parent_' + idBase)?.value || null;
+
+    custom[name].emoji = newEmoji;
+    custom[name].parent = newParent || null;
+
+    // Update color to match parent if parent changed
+    if (newParent && CATEGORY_TREE[newParent]) {
+        custom[name].color = CATEGORY_TREE[newParent].color;
+    }
+
+    // Update CATEGORY_TREE live
+    // Remove from old parent
+    for (const [p, info] of Object.entries(CATEGORY_TREE)) {
+        if (info.children && info.children[name]) delete info.children[name];
+    }
+    // Add to new parent
+    if (newParent && CATEGORY_TREE[newParent]) {
+        if (!CATEGORY_TREE[newParent].children) CATEGORY_TREE[newParent].children = {};
+        CATEGORY_TREE[newParent].children[name] = { emoji: newEmoji, keywords: custom[name].keywords || [] };
+    }
+
+    // Update DEFAULT_CATEGORIES
+    if (DEFAULT_CATEGORIES[name]) {
+        DEFAULT_CATEGORIES[name].emoji = newEmoji;
+        DEFAULT_CATEGORIES[name].parent = newParent || null;
+    }
+
+    store.settings.customCategories = custom;
+    saveStore();
+    if (getApiUrl()) apiCall('saveCustomCategory', { name, color: custom[name].color, keywords: (custom[name].keywords || []).join(','), emoji: newEmoji, parent: newParent || '' });
+    showToast(`Updated ${newEmoji} ${name}`, 'success');
+    renderCustomCatList();
 }
 
 // ===================== PAYDAY CYCLE HELPERS =====================
@@ -5119,18 +5258,31 @@ function detectRecurringPayments() {
     return recurring;
 }
 
+function dismissRecurring(name) {
+    if (!store.settings.dismissedRecurring) store.settings.dismissedRecurring = [];
+    if (!store.settings.dismissedRecurring.includes(name)) {
+        store.settings.dismissedRecurring.push(name);
+    }
+    saveStore();
+    renderRecurringPayments();
+}
+
 function renderRecurringPayments() {
     const section = document.getElementById('recurringSection');
     const list = document.getElementById('recurringList');
     const totalEl = document.getElementById('recurringTotal');
     if (!section || !list) return;
 
-    const recurring = detectRecurringPayments();
+    const dismissed = store.settings.dismissedRecurring || [];
+    const recurring = detectRecurringPayments().filter(r => !dismissed.includes(r.name));
+
     if (recurring.length === 0) { section.style.display = 'none'; return; }
     section.style.display = 'block';
 
     const totalMonthly = recurring.reduce((s, r) => s + r.monthlyCost, 0);
-    totalEl.innerHTML = `Estimated monthly recurring: <span>£${totalMonthly.toFixed(2)}</span> across ${recurring.length} payments`;
+    const dismissedCount = dismissed.length;
+    totalEl.innerHTML = `Estimated monthly recurring: <span>£${totalMonthly.toFixed(2)}</span> across ${recurring.length} payments
+        ${dismissedCount > 0 ? `<button onclick="clearDismissedRecurring()" style="margin-left:8px;font-size:0.7rem;background:none;border:1px solid var(--border);color:var(--text-dim);border-radius:4px;padding:2px 6px;cursor:pointer">${dismissedCount} hidden — show all</button>` : ''}`;
 
     list.innerHTML = recurring.map(r => {
         const emoji = getCatEmoji(r.category);
@@ -5138,6 +5290,7 @@ function renderRecurringPayments() {
         let badges = '';
         if (r.priceIncrease) badges += '<span class="recurring-badge increase">Price Increase</span>';
         if (r.review) badges += '<span class="recurring-badge review">Review</span>';
+        const safeName = r.name.replace(/'/g, "\\'");
 
         return `
             <div class="recurring-item">
@@ -5146,9 +5299,16 @@ function renderRecurringPayments() {
                 ${badges}
                 <span class="recurring-item-freq">${r.frequency}<br><span style="font-size:0.7rem">Next: ${nextStr}</span></span>
                 <span class="recurring-item-amount">£${r.amount.toFixed(2)}</span>
+                <button onclick="dismissRecurring('${safeName}')" title="Hide this subscription" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1rem;padding:0 4px;line-height:1" aria-label="Dismiss">✕</button>
             </div>
         `;
     }).join('');
+}
+
+function clearDismissedRecurring() {
+    store.settings.dismissedRecurring = [];
+    saveStore();
+    renderRecurringPayments();
 }
 
 // ===================== SAVINGS GOALS =====================
