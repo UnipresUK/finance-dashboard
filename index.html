@@ -1323,7 +1323,7 @@
         <div class="filter-section">
             <h4>Months <button class="filter-chip-sm" onclick="toggleAllMonths()">Toggle All</button>
                 <label style="font-size:0.7rem;color:var(--text-dim);margin-left:8px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">
-                    <input type="checkbox" id="useCustomMonthStart" onchange="rebuildFilterMonths()" style="width:12px;height:12px;accent-color:var(--accent)">
+                    <input type="checkbox" id="useCustomMonthStart" onchange="rebuildFilterMonths();saveUiPrefs()" style="width:12px;height:12px;accent-color:var(--accent)">
                     Use 23rd start
                 </label>
             </h4>
@@ -1950,9 +1950,34 @@ async function handlePinComplete() {
     }
 }
 
+const UI_PREFS_KEY = 'financeDashboard_uiPrefs';
+
+function saveUiPrefs() {
+    const prefs = {
+        useCustomMonthStart: document.getElementById('useCustomMonthStart')?.checked || false,
+        recurringActiveTab: recurringActiveTab || 'all',
+        activeFilterType: activeFilter.type
+    };
+    localStorage.setItem(UI_PREFS_KEY, JSON.stringify(prefs));
+}
+
+function restoreUiPrefs() {
+    try {
+        const raw = localStorage.getItem(UI_PREFS_KEY);
+        if (!raw) return;
+        const prefs = JSON.parse(raw);
+        const cb = document.getElementById('useCustomMonthStart');
+        if (cb && prefs.useCustomMonthStart) cb.checked = true;
+        if (prefs.recurringActiveTab) recurringActiveTab = prefs.recurringActiveTab;
+        if (prefs.activeFilterType) activeFilter.type = prefs.activeFilterType;
+    } catch(e) {}
+}
+
 function unlockApp() {
     document.getElementById('pinScreen').style.display = 'none';
     document.getElementById('appWrapper').style.display = 'block';
+
+    restoreUiPrefs();
 
     try {
         renderDashboard();
@@ -5039,7 +5064,6 @@ function renderDailyAllowance(txs, totalSpent, totalIncome) {
     }
 
     const remaining = Math.max(0, cycleBudgetTotal - cycleSpent);
-    const dailyAllowance = cycle.daysLeft > 0 ? remaining / cycle.daysLeft : 0;
     const pct = cycleBudgetTotal > 0 ? Math.min(1, cycleSpent / cycleBudgetTotal) : 0;
 
     // Color: green if <60%, amber if 60-90%, red if >90%
@@ -5054,7 +5078,7 @@ function renderDailyAllowance(txs, totalSpent, totalIncome) {
 
     card.style.display = 'block';
     card.innerHTML = `
-        <div class="label">Daily Allowance</div>
+        <div class="label">Monthly Allowance</div>
         <div class="allowance-ring">
             <svg width="90" height="90" viewBox="0 0 80 80">
                 <circle cx="40" cy="40" r="36" fill="none" stroke="var(--surface2)" stroke-width="6"/>
@@ -5063,9 +5087,9 @@ function renderDailyAllowance(txs, totalSpent, totalIncome) {
             </svg>
             <div class="ring-text" style="color:${color}">${Math.round(pct * 100)}%</div>
         </div>
-        <div class="allowance-amount" style="color:${color}">£${dailyAllowance.toFixed(2)}</div>
+        <div class="allowance-amount" style="color:${color}">£${remaining.toFixed(2)}</div>
         <div class="sub" style="color:${color};font-weight:600">${status}</div>
-        <div class="sub">£${remaining.toFixed(0)} left for ${cycle.daysLeft} days</div>
+        <div class="sub">£${cycleSpent.toFixed(0)} spent of £${cycleBudgetTotal.toFixed(0)}</div>
     `;
 }
 
@@ -5366,6 +5390,7 @@ function toggleLabelPicker(name) {
 
 function setRecurringTab(tab) {
     recurringActiveTab = tab;
+    saveUiPrefs();
     renderRecurringPayments();
 }
 
@@ -5428,8 +5453,11 @@ function renderRecurringPayments() {
         const customLabels = getRecurringLabels(r.name);
 
         let badges = '';
-        if (r.priceIncrease) badges += '<span class="recurring-badge increase">↑ Price Increase</span>';
-        if (r.review)        badges += '<span class="recurring-badge review">Review</span>';
+        const ignoredFlags = (store.settings.recurringIgnoredFlags || {})[r.name] || [];
+        if (r.priceIncrease && !ignoredFlags.includes('priceIncrease'))
+            badges += `<span class="recurring-badge increase" onclick="dismissRecurringFlag('${safeName}','priceIncrease')" title="Click to remove">↑ Price Increase ✕</span>`;
+        if (r.review && !ignoredFlags.includes('review'))
+            badges += `<span class="recurring-badge review" onclick="dismissRecurringFlag('${safeName}','review')" title="Click to remove">Review ✕</span>`;
         customLabels.forEach(l => {
             badges += `<span class="recurring-badge custom" onclick="toggleRecurringLabel('${safeName}','${l}')" title="Click to remove">${l} ✕</span>`;
         });
@@ -5448,7 +5476,8 @@ function renderRecurringPayments() {
                 </div>
                 <span class="recurring-item-freq">${r.frequency}<br><span style="font-size:0.7rem">Next: ${nextStr}</span></span>
                 <span class="recurring-item-amount">£${r.amount.toFixed(2)}</span>
-                <button onclick="toggleLabelPicker('${safeName}')" title="Add label" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:0.75rem;padding:2px 6px;border-radius:4px;white-space:nowrap">🏷 Label</button>
+                <button onclick="toggleLabelPicker('${safeName}')" title="Add label" style="background:none;border:1px solid var(--border);color:var(--text-dim);cursor:pointer;font-size:0.75rem;padding:2px 6px;border-radius:4px;white-space:nowrap">🏷</button>
+                <button onclick="confirmDeleteRecurring('${safeName}')" title="Delete all transactions" style="background:none;border:1px solid var(--red);color:var(--red);cursor:pointer;font-size:0.75rem;padding:2px 6px;border-radius:4px;white-space:nowrap">🗑</button>
                 <button onclick="dismissRecurring('${safeName}')" title="Hide" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1rem;padding:0 2px;line-height:1">✕</button>
             </div>
         `;
@@ -5459,6 +5488,34 @@ function clearDismissedRecurring() {
     store.settings.dismissedRecurring = [];
     saveStore();
     renderRecurringPayments();
+}
+
+function dismissRecurringFlag(name, flag) {
+    if (!store.settings.recurringIgnoredFlags) store.settings.recurringIgnoredFlags = {};
+    if (!store.settings.recurringIgnoredFlags[name]) store.settings.recurringIgnoredFlags[name] = [];
+    if (!store.settings.recurringIgnoredFlags[name].includes(flag)) {
+        store.settings.recurringIgnoredFlags[name].push(flag);
+    }
+    saveStore();
+    renderRecurringPayments();
+}
+
+function confirmDeleteRecurring(name) {
+    const txs = store.transactions.filter(t => getMerchantName(t.description) === name);
+    if (!txs.length) { showToast('No transactions found for ' + name, 'error'); return; }
+    if (!confirm(`Delete all ${txs.length} transactions for "${name}"? This cannot be undone.`)) return;
+    deleteRecurringTransactions(name);
+}
+
+async function deleteRecurringTransactions(name) {
+    const ids = store.transactions.filter(t => getMerchantName(t.description) === name).map(t => t.id);
+    store.transactions = store.transactions.filter(t => getMerchantName(t.description) !== name);
+    await saveStore();
+    showToast(`Deleted ${ids.length} transactions for "${name}"`, 'success');
+    if (getApiUrl()) {
+        apiCall('deleteTransactions', { ids });
+    }
+    renderDashboard();
 }
 
 // ===================== SAVINGS GOALS =====================
