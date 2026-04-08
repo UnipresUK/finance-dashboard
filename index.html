@@ -1327,7 +1327,7 @@
             <h4>Months <button class="filter-chip-sm" onclick="toggleAllMonths()">Toggle All</button>
                 <label style="font-size:0.7rem;color:var(--text-dim);margin-left:8px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">
                     <input type="checkbox" id="useCustomMonthStart" onchange="rebuildFilterMonths();saveUiPrefs()" style="width:12px;height:12px;accent-color:var(--accent)">
-                    Use 23rd start
+                    Use <span id="customStartDayLabel">23rd</span> start
                 </label>
             </h4>
             <div class="filter-months-grid" id="filterMonthsGrid"></div>
@@ -2324,8 +2324,12 @@ async function syncFromSheet() {
                     ? parseInt(data.settings.paydayDate) : data.settings.paydayDate;
             }
             if (data.settings.monthStartDay !== undefined) {
-                store.settings.monthStartDay = typeof data.settings.monthStartDay === 'string'
+                const msdParsed = typeof data.settings.monthStartDay === 'string'
                     ? parseInt(data.settings.monthStartDay) : data.settings.monthStartDay;
+                if (!isNaN(msdParsed) && msdParsed >= 1 && msdParsed <= 31) {
+                    store.settings.monthStartDay = msdParsed;
+                }
+                // If invalid/missing from sheet, keep the store default (23)
             }
             // Recurring & savings settings — parse JSON if stored as string
             const parseJsonSetting = (v, fallback) => {
@@ -3385,6 +3389,9 @@ function rebuildFilterMonths() {
 function buildFilterMonths() {
     const useCustom = document.getElementById('useCustomMonthStart')?.checked;
     const msd = getMonthStartDay(); // e.g. 23
+    // Update dynamic label to show actual configured day
+    const lbl = document.getElementById('customStartDayLabel');
+    if (lbl) lbl.textContent = ordinal(store.settings.monthStartDay || 23);
     const months = [...new Set(store.transactions.filter(t => t.date).map(t => t.date.substring(0, 7)))].sort().reverse();
     const grid = document.getElementById('filterMonthsGrid');
     customMonthRanges = {};
@@ -3405,8 +3412,8 @@ function buildFilterMonths() {
                 if (seen.has(key)) return;
                 seen.add(key);
                 const start = `${py}-${String(pm).padStart(2, '0')}-${String(msd).padStart(2, '0')}`;
-                const endDate = new Date(py, pm, msd - 1); // pm = 0-indexed next month
-                const end = endDate.toISOString().substring(0, 10);
+                const endDate = new Date(py, pm, msd - 1); // pm used as 0-indexed = next month (1-indexed pm happens to equal 0-indexed pm+1)
+                const end = `${endDate.getFullYear()}-${String(endDate.getMonth()+1).padStart(2,'0')}-${String(endDate.getDate()).padStart(2,'0')}`;
                 // Only include if any transaction falls in this range
                 if (store.transactions.some(t => t.date >= start && t.date <= end)) {
                     const names = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
