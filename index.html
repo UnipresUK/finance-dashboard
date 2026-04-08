@@ -3308,7 +3308,8 @@ function getCustomMonthRange(date) {
             end = new Date(d.getFullYear(), d.getMonth(), msd - 1);
         }
     }
-    const fmt = (dt) => dt.toISOString().substring(0, 10);
+    // Use local date parts to avoid UTC timezone shift (e.g. BST = UTC+1 shifts midnight back a day)
+    const fmt = (dt) => `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
     return { start: fmt(start), end: fmt(end), startDate: start, endDate: end };
 }
 
