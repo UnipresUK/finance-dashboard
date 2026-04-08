@@ -3397,29 +3397,30 @@ function buildFilterMonths() {
     customMonthRanges = {};
 
     if (useCustom && msd !== 1) {
-        // Build custom-period chips: each period = msd of one month → (msd-1) of next month
-        // Label the period by the month the start falls in
+        // Each chip is keyed by the calendar month it ENDS in.
+        // "Feb 2026" = the period Jan 23 – Feb 22 (starts prev month's msd, ends this month's msd-1)
+        // This matches what getMonthRangeLabel() and the user both expect.
+        const localFmt = dt => `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
         const periods = [];
         const seen = new Set();
         months.forEach(ym => {
-            // For each calendar month that has transactions, compute which custom period it belongs to
             const [y, mo] = ym.split('-').map(Number);
-            // Two possible periods overlap this calendar month:
-            // Period A: starts msd of this month
-            // Period B: starts msd of previous month (ends msd-1 of this month)
-            [[y, mo], [mo === 1 ? y - 1 : y, mo === 1 ? 12 : mo - 1]].forEach(([py, pm]) => {
-                const key = `${py}-${String(pm).padStart(2, '0')}`;
+            // Each calendar month can be the END month of one period, and the START month of the next.
+            // Generate the period ending in this month AND the period ending in the next month.
+            [[y, mo], mo === 12 ? [y + 1, 1] : [y, mo + 1]].forEach(([ey, em]) => {
+                const key = `${ey}-${String(em).padStart(2, '0')}`;
                 if (seen.has(key)) return;
                 seen.add(key);
-                const start = `${py}-${String(pm).padStart(2, '0')}-${String(msd).padStart(2, '0')}`;
-                const endDate = new Date(py, pm, msd - 1); // pm used as 0-indexed = next month (1-indexed pm happens to equal 0-indexed pm+1)
-                const end = `${endDate.getFullYear()}-${String(endDate.getMonth()+1).padStart(2,'0')}-${String(endDate.getDate()).padStart(2,'0')}`;
-                // Only include if any transaction falls in this range
+                // Start = previous month's msd
+                const sy = em === 1 ? ey - 1 : ey;
+                const sm = em === 1 ? 12 : em - 1;
+                const start = `${sy}-${String(sm).padStart(2,'0')}-${String(msd).padStart(2,'0')}`;
+                // End = this month's (msd-1)
+                const endDate = new Date(ey, em - 1, msd - 1); // em-1 for 0-indexed month
+                const end = localFmt(endDate);
                 if (store.transactions.some(t => t.date >= start && t.date <= end)) {
-                    const names = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                    const label = `${names[pm]} ${py}`;
-                    customMonthRanges[key] = { start, end, label };
-                    periods.push({ key, label, py, pm });
+                    customMonthRanges[key] = { start, end };
+                    periods.push({ key, label: formatMonth(key), py: ey, pm: em });
                 }
             });
         });
