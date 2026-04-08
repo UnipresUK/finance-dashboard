@@ -3308,14 +3308,25 @@ function getCustomMonthRange(date) {
     return { start: fmt(start), end: fmt(end), startDate: start, endDate: end };
 }
 
+function ordinal(n) {
+    const s = ['th','st','nd','rd'];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
 function getCustomMonthLabel(date) {
     const range = getCustomMonthRange(date);
-    const msd = getMonthStartDay();
-    // Label by the month the period mostly falls in
-    const midDate = new Date((new Date(range.start).getTime() + new Date(range.end).getTime()) / 2);
     const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    if (msd === 1) return `${names[midDate.getMonth()]} ${midDate.getFullYear()}`;
-    return `${names[midDate.getMonth()]} ${midDate.getFullYear()} (${msd}th–${msd - 1}${msd - 1 === 1 ? 'st' : msd - 1 === 2 ? 'nd' : msd - 1 === 3 ? 'rd' : 'th'})`;
+    const start = new Date(range.start + 'T00:00:00');
+    const end   = new Date(range.end   + 'T00:00:00');
+    return `${ordinal(start.getDate())} ${names[start.getMonth()]} – ${ordinal(end.getDate())} ${names[end.getMonth()]}`;
+}
+
+function getMonthRangeLabel(ym) {
+    // ym = "2026-04"; compute the date range for that month under current start-day setting
+    const [y, m] = ym.split('-').map(Number);
+    const mid = new Date(y, m - 1, 15);
+    return getCustomMonthLabel(mid);
 }
 
 function getFilteredTransactions() {
@@ -3537,7 +3548,7 @@ function updateFilterLabel() {
     } else if (activeFilter.type === 'dateRange') {
         label.textContent = `${formatDate(activeFilter.dateFrom)} - ${formatDate(activeFilter.dateTo)}`;
     } else if (activeFilter.months.length === 1) {
-        label.textContent = formatMonth(activeFilter.months[0]);
+        label.textContent = getMonthRangeLabel(activeFilter.months[0]);
     } else if (activeFilter.months.length <= 3) {
         label.textContent = activeFilter.months.map(m => formatMonth(m)).join(', ');
     } else {
