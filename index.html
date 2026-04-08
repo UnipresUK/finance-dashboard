@@ -2326,10 +2326,10 @@ async function syncFromSheet() {
             if (data.settings.monthStartDay !== undefined) {
                 const msdParsed = typeof data.settings.monthStartDay === 'string'
                     ? parseInt(data.settings.monthStartDay) : data.settings.monthStartDay;
-                if (!isNaN(msdParsed) && msdParsed >= 1 && msdParsed <= 31) {
+                if (!isNaN(msdParsed) && msdParsed >= 2 && msdParsed <= 31) {
                     store.settings.monthStartDay = msdParsed;
                 }
-                // If invalid/missing from sheet, keep the store default (23)
+                // If missing/invalid/1 from sheet, keep existing store value (default 23)
             }
             // Recurring & savings settings — parse JSON if stored as string
             const parseJsonSetting = (v, fallback) => {
@@ -4799,7 +4799,7 @@ function saveSettings() {
     const paydayVal = parseInt(document.getElementById('paydayDate').value);
     store.settings.paydayDate = (paydayVal >= 1 && paydayVal <= 31) ? paydayVal : null;
     const msdVal = parseInt(document.getElementById('monthStartDay').value);
-    store.settings.monthStartDay = (msdVal >= 1 && msdVal <= 31) ? msdVal : 1;
+    store.settings.monthStartDay = (msdVal >= 2 && msdVal <= 31) ? msdVal : (store.settings.monthStartDay || 23);
 
     // Save custom rules
     const allCats = Object.keys(CATEGORIES).filter(c => c !== 'Other');
