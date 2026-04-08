@@ -1982,6 +1982,13 @@ function unlockApp() {
 
     restoreUiPrefs();
 
+    // Migrate monthStartDay: if stored as 1 (from old bug where empty form saved 1), reset to 23
+    if (!(store.settings.monthStartDay >= 2)) {
+        store.settings.monthStartDay = 23;
+        saveStore();
+        if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    }
+
     try {
         renderDashboard();
     } catch (err) {
@@ -3292,7 +3299,9 @@ let analysisPeriod = 'weekly';
 // Custom month helpers — month runs from monthStartDay to (monthStartDay - 1) of next month
 function getMonthStartDay() {
     const useCustom = document.getElementById('useCustomMonthStart')?.checked;
-    return useCustom ? (store.settings.monthStartDay || 1) : 1;
+    if (!useCustom) return 1;
+    const msd = store.settings.monthStartDay;
+    return (msd >= 2) ? msd : 23; // treat 1 or unset as default 23
 }
 
 function getCustomMonthRange(date) {
@@ -3391,7 +3400,7 @@ function buildFilterMonths() {
     const msd = getMonthStartDay(); // e.g. 23
     // Update dynamic label to show actual configured day
     const lbl = document.getElementById('customStartDayLabel');
-    if (lbl) lbl.textContent = ordinal(store.settings.monthStartDay || 23);
+    if (lbl) lbl.textContent = ordinal(store.settings.monthStartDay >= 2 ? store.settings.monthStartDay : 23);
     const months = [...new Set(store.transactions.filter(t => t.date).map(t => t.date.substring(0, 7)))].sort().reverse();
     const grid = document.getElementById('filterMonthsGrid');
     customMonthRanges = {};
