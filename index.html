@@ -1284,9 +1284,12 @@
             <span class="sync-dot none" id="syncDot"></span>
             <span id="syncText">Not connected</span>
         </div>
-        <button class="btn btn-outline" id="filterBtn" onclick="toggleFilterPanel()">
-            <span id="filterLabel">All Time</span> ▼
-        </button>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+            <button class="btn btn-outline" id="filterBtn" onclick="toggleFilterPanel()">
+                <span id="filterLabel">All Time</span> ▼
+            </button>
+            <button id="btnCurrentMonthHeader" onclick="setFilterPreset('currentMonth');toggleFilterPanel()" style="font-size:0.65rem;color:var(--accent);background:none;border:none;cursor:pointer;padding:0;line-height:1">Current Month</button>
+        </div>
         <button class="btn btn-outline" onclick="openSettings()">Settings</button>
         <button class="btn btn-outline" onclick="openBudgets()">Budgets</button>
         <a class="btn btn-lloyds" href="https://www.lloydsbank.com/online-banking/login" target="_blank" rel="noopener" title="Open Lloyds Online Banking to download CSV">
@@ -1321,7 +1324,7 @@
             </div>
         </div>
         <div class="filter-section">
-            <h4>Months <button class="filter-chip-sm active" id="btnCurrentMonth" onclick="setFilterPreset('currentMonth')">Current Month</button> <button class="filter-chip-sm" onclick="toggleAllMonths()">Toggle All</button>
+            <h4>Months <button class="filter-chip-sm" onclick="toggleAllMonths()">Toggle All</button>
                 <label style="font-size:0.7rem;color:var(--text-dim);margin-left:8px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">
                     <input type="checkbox" id="useCustomMonthStart" onchange="rebuildFilterMonths();saveUiPrefs()" style="width:12px;height:12px;accent-color:var(--accent)">
                     Use 23rd start
@@ -3511,9 +3514,6 @@ function setFilterPreset(preset) {
     document.querySelectorAll('.filter-quick-btns .filter-chip').forEach(b => {
         b.classList.toggle('active', b.textContent.toLowerCase().includes(match));
     });
-    // Keep the Current Month chip in the months section in sync
-    const btnCM = document.getElementById('btnCurrentMonth');
-    if (btnCM) btnCM.classList.toggle('active', preset === 'currentMonth');
 
     buildFilterMonths();
     renderDashboard();
