@@ -1321,7 +1321,7 @@
             </div>
         </div>
         <div class="filter-section">
-            <h4>Months <button class="filter-chip-sm" onclick="toggleAllMonths()">Toggle All</button>
+            <h4>Months <button class="filter-chip-sm active" id="btnCurrentMonth" onclick="setFilterPreset('currentMonth')">Current Month</button> <button class="filter-chip-sm" onclick="toggleAllMonths()">Toggle All</button>
                 <label style="font-size:0.7rem;color:var(--text-dim);margin-left:8px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">
                     <input type="checkbox" id="useCustomMonthStart" onchange="rebuildFilterMonths();saveUiPrefs()" style="width:12px;height:12px;accent-color:var(--accent)">
                     Use 23rd start
@@ -1969,7 +1969,7 @@ function restoreUiPrefs() {
         const cb = document.getElementById('useCustomMonthStart');
         if (cb && prefs.useCustomMonthStart) cb.checked = true;
         if (prefs.recurringActiveTab) recurringActiveTab = prefs.recurringActiveTab;
-        if (prefs.activeFilterType) activeFilter.type = prefs.activeFilterType;
+        // Always default to current month — do not restore last filter type
     } catch(e) {}
 }
 
@@ -3511,6 +3511,9 @@ function setFilterPreset(preset) {
     document.querySelectorAll('.filter-quick-btns .filter-chip').forEach(b => {
         b.classList.toggle('active', b.textContent.toLowerCase().includes(match));
     });
+    // Keep the Current Month chip in the months section in sync
+    const btnCM = document.getElementById('btnCurrentMonth');
+    if (btnCM) btnCM.classList.toggle('active', preset === 'currentMonth');
 
     buildFilterMonths();
     renderDashboard();
