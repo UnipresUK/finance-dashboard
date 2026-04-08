@@ -3284,7 +3284,8 @@ let analysisPeriod = 'weekly';
 
 // Custom month helpers — month runs from monthStartDay to (monthStartDay - 1) of next month
 function getMonthStartDay() {
-    return store.settings.monthStartDay || 1;
+    const useCustom = document.getElementById('useCustomMonthStart')?.checked;
+    return useCustom ? (store.settings.monthStartDay || 1) : 1;
 }
 
 function getCustomMonthRange(date) {
@@ -3368,9 +3369,9 @@ function toggleFilterPanel() {
 let customMonthRanges = {}; // key: 'YYYY-MM' label → { start, end } date strings
 
 function rebuildFilterMonths() {
-    // Clear any active month selections when toggling the mode
+    // Reset to current month with the new start-day setting applied
     activeFilter.months = [];
-    activeFilter.type = 'all';
+    activeFilter.type = 'currentMonth';
     activeFilter.dateFrom = null;
     activeFilter.dateTo = null;
     buildFilterMonths();
