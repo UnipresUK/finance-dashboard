@@ -4145,9 +4145,8 @@ function renderTrendChart() {
         }
     });
 
-    const months = [...new Set([...Object.keys(monthlySpend), ...Object.keys(monthlyIncome)])].sort();
+    const months = Object.keys(monthlySpend).sort();
     const spendData = months.map(m => monthlySpend[m] || 0);
-    const incomeData = months.map(m => monthlyIncome[m] || 0);
 
     if (trendChart) trendChart.destroy();
     trendChart = new Chart(document.getElementById('trendChart'), {
@@ -4155,7 +4154,6 @@ function renderTrendChart() {
         data: {
             labels: months.map(formatMonth),
             datasets: [
-                { label: 'Income', data: incomeData, backgroundColor: 'rgba(0,184,148,0.6)', borderRadius: 4 },
                 { label: 'Spending', data: spendData, backgroundColor: 'rgba(225,112,85,0.6)', borderRadius: 4 }
             ]
         },
@@ -4167,8 +4165,8 @@ function renderTrendChart() {
                 y: { grid: { color: '#2e3347' }, ticks: { color: '#8b8fa3', callback: v => '£' + v } }
             },
             plugins: {
-                legend: { labels: { color: '#e2e4eb', usePointStyle: true, pointStyle: 'circle' } },
-                tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: £${ctx.parsed.y.toFixed(2)}` } }
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => ` Spending: £${ctx.parsed.y.toFixed(2)}` } }
             }
         }
     });
@@ -4183,26 +4181,22 @@ function getWeekKey(dateStr) {
 }
 
 function renderAnalysisChart() {
-    const txs = getFilteredTransactions();
+    // Use ALL transactions (not filtered) to always show last 15 periods
+    let txs = store.transactions;
+    if (currentAccount !== 'all') txs = txs.filter(t => t.account === currentAccount);
     const debits = txs.filter(t => t.amount < 0 && t.date);
-    const credits = txs.filter(t => t.amount > 0 && t.date);
 
     const periods = {};
     debits.forEach(t => {
         const key = analysisPeriod === 'weekly' ? getWeekKey(t.date) : t.date.substring(0, 7);
-        periods[key] = periods[key] || { spend: 0, income: 0 };
-        periods[key].spend += Math.abs(t.amount);
-    });
-    credits.forEach(t => {
-        const key = analysisPeriod === 'weekly' ? getWeekKey(t.date) : t.date.substring(0, 7);
-        periods[key] = periods[key] || { spend: 0, income: 0 };
-        periods[key].income += t.amount;
+        periods[key] = (periods[key] || 0) + Math.abs(t.amount);
     });
 
-    const keys = Object.keys(periods).sort();
+    // Last 15 periods
+    const keys = Object.keys(periods).sort().slice(-15);
     const labels = keys.map(k => {
         if (analysisPeriod === 'weekly') {
-            const d = new Date(k);
+            const d = new Date(k + 'T00:00:00');
             return `${d.getDate()}/${d.getMonth()+1}`;
         }
         return formatMonth(k);
@@ -4210,13 +4204,20 @@ function renderAnalysisChart() {
 
     if (analysisChart) analysisChart.destroy();
     analysisChart = new Chart(document.getElementById('analysisBarChart'), {
-        type: 'bar',
+        type: 'line',
         data: {
             labels,
-            datasets: [
-                { label: 'Income', data: keys.map(k => periods[k].income), backgroundColor: 'rgba(0,184,148,0.7)', borderRadius: 4 },
-                { label: 'Spending', data: keys.map(k => periods[k].spend), backgroundColor: 'rgba(225,112,85,0.7)', borderRadius: 4 }
-            ]
+            datasets: [{
+                label: 'Spending',
+                data: keys.map(k => periods[k]),
+                borderColor: 'rgba(225,112,85,1)',
+                backgroundColor: 'rgba(225,112,85,0.15)',
+                borderWidth: 2,
+                pointBackgroundColor: 'rgba(225,112,85,1)',
+                pointRadius: 4,
+                tension: 0.3,
+                fill: true
+            }]
         },
         options: {
             responsive: true,
@@ -4226,8 +4227,8 @@ function renderAnalysisChart() {
                 y: { grid: { color: '#2e3347' }, ticks: { color: '#8b8fa3', callback: v => '£' + v.toLocaleString() } }
             },
             plugins: {
-                legend: { labels: { color: '#e2e4eb', usePointStyle: true, pointStyle: 'circle' } },
-                tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: £${ctx.parsed.y.toFixed(2)}` } }
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => ` Spending: £${ctx.parsed.y.toFixed(2)}` } }
             }
         }
     });
