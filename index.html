@@ -1210,6 +1210,24 @@
             color: var(--accent-light);
         }
 
+        /* Dashboard tabs */
+        .dash-tabs { display:flex; gap:4px; padding:12px 24px 0; background:var(--surface); border-bottom:1px solid var(--border); }
+        .dash-tab { background:none; border:none; color:var(--text-dim); padding:8px 16px; cursor:pointer; font-size:0.9rem; border-bottom:2px solid transparent; transition:all 0.2s; }
+        .dash-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+        .dash-tab:hover:not(.active) { color:var(--text); }
+
+        /* Modal box (used by savings forecast modals) */
+        .modal-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .modal-box h3 { margin-bottom: 16px; font-size: 1.1rem; }
+
         /* Responsive adjustments for new sections */
         @media (max-width: 600px) {
             .health-gauge-wrap { flex-direction: column; align-items: center; }
@@ -1357,6 +1375,12 @@
         </div>
     </div>
 
+    <!-- Dashboard tab nav -->
+    <div class="dash-tabs" id="dashTabs">
+        <button class="dash-tab active" onclick="switchDashTab('overview')" id="tabOverview">Overview</button>
+        <button class="dash-tab" onclick="switchDashTab('forecast')" id="tabForecast">💰 Savings Forecast</button>
+    </div>
+
     <!-- Dashboard content -->
     <div id="dashboardContent" style="display:none">
         <!-- Summary cards -->
@@ -1367,7 +1391,10 @@
             <div class="card">
                 <div class="card-title">Spending by Category</div>
                 <div class="chart-container">
-                    <canvas id="categoryChart"></canvas>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;height:100%">
+                        <div style="position:relative"><canvas id="categoryChart"></canvas></div>
+                        <div style="position:relative"><canvas id="categoryBarChart"></canvas></div>
+                    </div>
                 </div>
             </div>
             <div class="card">
@@ -1502,6 +1529,16 @@
                 </table>
             </div>
         </div>
+    </div>
+
+    <!-- Savings Forecast Section -->
+    <div id="savingsForecastSection" style="display:none;padding:24px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+            <h2 style="margin:0;font-size:1.2rem;color:var(--text)">Savings Forecast</h2>
+            <button class="btn btn-primary" onclick="openAddPotModal()">+ Add Savings Pot</button>
+        </div>
+        <div id="savingsPotsContainer"></div>
+        <div id="savingsForecastTable" style="margin-top:24px;overflow-x:auto"></div>
     </div>
 </div>
 
@@ -2256,7 +2293,8 @@ function buildSettingsPayload() {
         dismissedRecurring: store.settings.dismissedRecurring || [],
         recurringLabels: store.settings.recurringLabels || {},
         recurringIgnoredFlags: store.settings.recurringIgnoredFlags || {},
-        savingsGoals: store.settings.savingsGoals || []
+        savingsGoals: store.settings.savingsGoals || [],
+        savingsForecast: store.settings.savingsForecast || []
     };
 }
 
@@ -2352,6 +2390,8 @@ async function syncFromSheet() {
             if (sheetFlags) store.settings.recurringIgnoredFlags = sheetFlags;
             const sheetGoals = parseJsonSetting(data.settings.savingsGoals, null);
             if (sheetGoals) store.settings.savingsGoals = sheetGoals;
+            const sheetForecast = parseJsonSetting(data.settings.savingsForecast, null);
+            if (sheetForecast) store.settings.savingsForecast = sheetForecast;
         }
 
         // Merge custom categories
@@ -2472,6 +2512,7 @@ function defaultStore() {
             customRules: {},
             customCategories: {},
             savingsGoals: [],
+            savingsForecast: [],
             paydayDate: null,
             monthStartDay: 23
         }
@@ -3587,6 +3628,7 @@ function setAnalysisPeriod(period) {
 
 // ===================== RENDER DASHBOARD =====================
 let categoryChart = null;
+let categoryBarChart = null;
 let trendChart = null;
 let analysisChart = null;
 let waterfallChart = null;
@@ -3596,6 +3638,8 @@ function renderDashboard() {
     const hasTx = store.transactions.length > 0;
     document.getElementById('emptyState').style.display = hasTx ? 'none' : 'block';
     document.getElementById('dashboardContent').style.display = hasTx ? 'block' : 'none';
+    const dashTabs = document.getElementById('dashTabs');
+    if (dashTabs) dashTabs.style.display = hasTx ? 'flex' : 'none';
 
     if (!hasTx) return;
 
@@ -3849,6 +3893,34 @@ function renderCategoryChart(debits) {
         }
     });
     document.getElementById('categoryChart').style.cursor = 'pointer';
+
+    if (categoryBarChart) categoryBarChart.destroy();
+    categoryBarChart = new Chart(document.getElementById('categoryBarChart'), {
+        type: 'bar',
+        data: {
+            labels: labels.map(l => l.length > 18 ? l.substring(0,18)+'…' : l),
+            datasets: [{
+                data: data,
+                backgroundColor: colors.map(c => c + 'cc'),
+                borderColor: colors,
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            indexAxis: 'y',  // horizontal bars
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => ` £${ctx.parsed.x.toFixed(2)}` } }
+            },
+            scales: {
+                x: { grid: { color: '#2e3347' }, ticks: { color: '#8b8fa3', callback: v => '£' + v.toLocaleString() } },
+                y: { grid: { display: false }, ticks: { color: '#e2e4eb', font: { size: 11 } } }
+            }
+        }
+    });
 }
 
 // ===================== CATEGORY DRILLDOWN =====================
@@ -5724,6 +5796,241 @@ function renderSavingsGoals() {
     }).join('');
 }
 
+// ===================== SAVINGS FORECAST =====================
+let editingPotId = null;
+let editingExpensePotId = null;
+
+function switchDashTab(tab) {
+    document.querySelectorAll('.dash-tab').forEach(b => b.classList.remove('active'));
+    document.getElementById(tab === 'overview' ? 'tabOverview' : 'tabForecast').classList.add('active');
+    document.getElementById('dashboardContent').style.display = tab === 'overview' ? 'block' : 'none';
+    const fc = document.getElementById('savingsForecastSection');
+    if (fc) fc.style.display = tab === 'forecast' ? 'block' : 'none';
+    if (tab === 'forecast') renderSavingsForecast();
+}
+
+function openAddPotModal(potId) {
+    editingPotId = potId || null;
+    const pots = store.settings.savingsForecast || [];
+    const pot = potId ? pots.find(p => p.id === potId) : null;
+    document.getElementById('savingsPotModalTitle').textContent = pot ? 'Edit Savings Pot' : 'Add Savings Pot';
+    document.getElementById('potName').value = pot ? pot.name : '';
+    document.getElementById('potBalance').value = pot ? pot.currentBalance : '';
+    document.getElementById('potContribution').value = pot ? pot.monthlyContribution : '';
+    document.getElementById('savingsPotModal').style.display = 'flex';
+}
+
+function closePotModal() { document.getElementById('savingsPotModal').style.display = 'none'; }
+
+function savePot() {
+    const name = document.getElementById('potName').value.trim();
+    const bal = parseFloat(document.getElementById('potBalance').value) || 0;
+    const contrib = parseFloat(document.getElementById('potContribution').value) || 0;
+    if (!name) return showToast('Enter a pot name', 'error');
+    if (!store.settings.savingsForecast) store.settings.savingsForecast = [];
+    if (editingPotId) {
+        const pot = store.settings.savingsForecast.find(p => p.id === editingPotId);
+        if (pot) { pot.name = name; pot.currentBalance = bal; pot.monthlyContribution = contrib; }
+    } else {
+        store.settings.savingsForecast.push({ id: Date.now().toString(), name, currentBalance: bal, monthlyContribution: contrib, expenses: [] });
+    }
+    saveStore();
+    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    closePotModal();
+    renderSavingsForecast();
+}
+
+function deletePot(potId) {
+    if (!confirm('Delete this savings pot?')) return;
+    store.settings.savingsForecast = (store.settings.savingsForecast || []).filter(p => p.id !== potId);
+    saveStore();
+    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    renderSavingsForecast();
+}
+
+function openExpenseModal(potId) {
+    editingExpensePotId = potId;
+    document.getElementById('expenseName').value = '';
+    document.getElementById('expenseAmount').value = '';
+    document.getElementById('expenseMonth').value = '';
+    document.getElementById('savingsExpenseModal').style.display = 'flex';
+}
+
+function closeExpenseModal() { document.getElementById('savingsExpenseModal').style.display = 'none'; }
+
+function saveExpense() {
+    const name = document.getElementById('expenseName').value.trim();
+    const amount = parseFloat(document.getElementById('expenseAmount').value) || 0;
+    const month = document.getElementById('expenseMonth').value;
+    if (!name || !amount || !month) return showToast('Fill in all fields', 'error');
+    const pot = (store.settings.savingsForecast || []).find(p => p.id === editingExpensePotId);
+    if (!pot) return;
+    if (!pot.expenses) pot.expenses = [];
+    pot.expenses.push({ id: Date.now().toString(), name, amount, month });
+    pot.expenses.sort((a,b) => a.month.localeCompare(b.month));
+    saveStore();
+    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    closeExpenseModal();
+    renderSavingsForecast();
+}
+
+function deleteExpense(potId, expId) {
+    const pot = (store.settings.savingsForecast || []).find(p => p.id === potId);
+    if (!pot) return;
+    pot.expenses = pot.expenses.filter(e => e.id !== expId);
+    saveStore();
+    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    renderSavingsForecast();
+}
+
+function renderSavingsForecast() {
+    const pots = store.settings.savingsForecast || [];
+    const container = document.getElementById('savingsPotsContainer');
+    const tableEl = document.getElementById('savingsForecastTable');
+    if (!container || !tableEl) return;
+
+    // Pot cards
+    if (pots.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:40px">No savings pots yet. Click "+ Add Savings Pot" to get started.</p>';
+        tableEl.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">${
+        pots.map(pot => {
+            const totalExpenses = (pot.expenses||[]).reduce((s,e) => s+e.amount, 0);
+            return `<div class="card" style="padding:16px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+                    <div>
+                        <div style="font-weight:600;font-size:1rem;color:var(--text)">${pot.name}</div>
+                        <div style="font-size:0.8rem;color:var(--text-dim);margin-top:2px">£${pot.monthlyContribution.toFixed(2)}/month</div>
+                    </div>
+                    <div style="display:flex;gap:6px">
+                        <button class="btn btn-outline btn-small" onclick="openAddPotModal('${pot.id}')">Edit</button>
+                        <button class="btn btn-outline btn-small" style="color:var(--red)" onclick="deletePot('${pot.id}')">✕</button>
+                    </div>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+                    <div style="text-align:center">
+                        <div style="font-size:1.3rem;font-weight:700;color:var(--accent)">£${pot.currentBalance.toFixed(2)}</div>
+                        <div style="font-size:0.7rem;color:var(--text-dim)">Current Balance</div>
+                    </div>
+                    <div style="text-align:center">
+                        <div style="font-size:1.3rem;font-weight:700;color:var(--red)">£${totalExpenses.toFixed(2)}</div>
+                        <div style="font-size:0.7rem;color:var(--text-dim)">Planned Expenses</div>
+                    </div>
+                </div>
+                <div style="margin-bottom:10px">
+                    ${(pot.expenses||[]).map(e => `
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:0.82rem">
+                            <span style="color:var(--text)">${e.name}</span>
+                            <span style="display:flex;align-items:center;gap:8px">
+                                <span style="color:var(--text-dim)">${formatMonth(e.month)}</span>
+                                <span style="color:var(--red);font-weight:600">£${e.amount.toFixed(2)}</span>
+                                <button style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:0.75rem" onclick="deleteExpense('${pot.id}','${e.id}')">✕</button>
+                            </span>
+                        </div>`).join('')}
+                </div>
+                <button class="btn btn-outline btn-small" style="width:100%" onclick="openExpenseModal('${pot.id}')">+ Add Planned Expense</button>
+            </div>`;
+        }).join('')
+    }</div>`;
+
+    // Forecast table
+    renderForecastTable(pots, tableEl);
+}
+
+function renderForecastTable(pots, el) {
+    // Generate next 18 months
+    const now = new Date();
+    const months = [];
+    for (let i = 0; i < 18; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+        months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+    }
+    const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    let html = `<div class="card" style="padding:16px">
+        <div class="card-title" style="margin-bottom:16px">18-Month Forecast</div>
+        <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;min-width:800px">
+        <thead>
+            <tr>
+                <th style="text-align:left;padding:8px 12px;color:var(--text-dim);font-weight:600;border-bottom:1px solid var(--border);min-width:160px">Pot</th>
+                ${months.map(m => {
+                    const [y,mo] = m.split('-');
+                    return `<th style="text-align:right;padding:8px 6px;color:var(--text-dim);font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap">${names[parseInt(mo)-1]}<br><span style="font-size:0.7rem">${y.slice(2)}</span></th>`;
+                }).join('')}
+            </tr>
+        </thead>
+        <tbody>`;
+
+    pots.forEach(pot => {
+        let balance = pot.currentBalance;
+        const monthlyBalances = [];
+        const monthlyExpenses = [];
+
+        months.forEach(m => {
+            balance += pot.monthlyContribution;
+            const exps = (pot.expenses||[]).filter(e => e.month === m);
+            const expTotal = exps.reduce((s,e) => s+e.amount, 0);
+            balance -= expTotal;
+            monthlyBalances.push(balance);
+            monthlyExpenses.push({ exps, total: expTotal });
+        });
+
+        html += `<tr style="border-bottom:2px solid var(--border)">
+            <td style="padding:10px 12px">
+                <div style="font-weight:600;color:var(--text)">${pot.name}</div>
+                <div style="font-size:0.75rem;color:var(--text-dim)">£${pot.monthlyContribution}/mo · Balance: £${pot.currentBalance.toFixed(0)}</div>
+            </td>
+            ${monthlyBalances.map((b,i) => {
+                const isShortfall = b < 0;
+                const hasExp = monthlyExpenses[i].total > 0;
+                return `<td style="text-align:right;padding:8px 6px;${hasExp ? 'background:rgba(108,92,231,0.08)' : ''}">
+                    <div style="font-weight:600;color:${isShortfall ? 'var(--red)' : 'var(--green)'}">£${Math.abs(b).toFixed(0)}${isShortfall ? ' ⚠' : ''}</div>
+                    ${hasExp ? `<div style="font-size:0.7rem;color:var(--accent)">-£${monthlyExpenses[i].total.toFixed(0)}</div>` : ''}
+                </td>`;
+            }).join('')}
+        </tr>`;
+
+        // Expense sub-rows
+        const allExpMonths = new Set((pot.expenses||[]).map(e => e.month));
+        if (allExpMonths.size > 0) {
+            (pot.expenses||[]).forEach(exp => {
+                html += `<tr style="background:rgba(108,92,231,0.04)">
+                    <td style="padding:4px 12px 4px 24px;color:var(--text-dim);font-size:0.78rem">↳ ${exp.name}</td>
+                    ${months.map(m => `<td style="text-align:right;padding:4px 6px;font-size:0.78rem;color:${m === exp.month ? 'var(--red)' : 'transparent'}">
+                        ${m === exp.month ? `-£${exp.amount.toFixed(0)}` : '-'}
+                    </td>`).join('')}
+                </tr>`;
+            });
+        }
+    });
+
+    // Totals row
+    const potBalances = pots.map(p => {
+        let b = p.currentBalance;
+        return months.map(m => {
+            b += p.monthlyContribution;
+            const exp = (p.expenses||[]).filter(e => e.month === m).reduce((s,e) => s+e.amount, 0);
+            b -= exp;
+            return b;
+        });
+    });
+
+    html += `<tr style="border-top:2px solid var(--border);background:var(--surface2)">
+        <td style="padding:10px 12px;font-weight:700;color:var(--text)">Total Savings</td>
+        ${months.map((_,i) => {
+            const total = potBalances.reduce((s,arr) => s + arr[i], 0);
+            return `<td style="text-align:right;padding:8px 6px;font-weight:700;color:${total < 0 ? 'var(--red)' : 'var(--green)'}">£${Math.abs(total).toFixed(0)}</td>`;
+        }).join('')}
+    </tr>`;
+
+    html += `</tbody></table></div></div>`;
+    el.innerHTML = html;
+}
+
 // ===================== MONTH-OVER-MONTH INSIGHTS =====================
 function renderInsights() {
     const section = document.getElementById('insightsSection');
@@ -5863,5 +6170,52 @@ function renderInsights() {
 // ===================== INIT =====================
 initPinScreen();
 </script>
+
+<!-- Savings Pot Modal -->
+<div class="modal-overlay" id="savingsPotModal" style="display:none">
+    <div class="modal-box" style="max-width:420px">
+        <h3 id="savingsPotModalTitle">Add Savings Pot</h3>
+        <div class="form-group">
+            <label>Pot Name</label>
+            <input type="text" id="potName" placeholder="e.g. Holiday Account">
+        </div>
+        <div class="form-group">
+            <label>Current Balance (£)</label>
+            <input type="number" id="potBalance" placeholder="0.00" step="0.01">
+        </div>
+        <div class="form-group">
+            <label>Monthly Contribution (£)</label>
+            <input type="number" id="potContribution" placeholder="0.00" step="0.01">
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+            <button class="btn btn-outline" onclick="closePotModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="savePot()">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Savings Expense Modal -->
+<div class="modal-overlay" id="savingsExpenseModal" style="display:none">
+    <div class="modal-box" style="max-width:380px">
+        <h3>Add Planned Expense</h3>
+        <div class="form-group">
+            <label>Description</label>
+            <input type="text" id="expenseName" placeholder="e.g. Crete Holiday">
+        </div>
+        <div class="form-group">
+            <label>Amount (£)</label>
+            <input type="number" id="expenseAmount" placeholder="0.00" step="0.01">
+        </div>
+        <div class="form-group">
+            <label>Month Needed</label>
+            <input type="month" id="expenseMonth">
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+            <button class="btn btn-outline" onclick="closeExpenseModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveExpense()">Add</button>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>
