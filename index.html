@@ -1540,23 +1540,19 @@
         <div id="savingsPotsContainer"></div>
         <div id="savingsForecastTable" style="margin-top:24px;overflow-x:auto"></div>
 
-        <!-- Transaction History Lookup -->
+        <!-- Savings Transactions -->
         <div class="card" style="margin-top:24px">
             <div class="card-title">
-                Transaction History Lookup
-                <div style="display:flex;gap:8px;align-items:center">
-                    <select id="txLookupMonth" onchange="renderTxLookup()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.85rem">
-                        <option value="">— pick a month —</option>
-                    </select>
-                    <select id="txLookupAccount" onchange="renderTxLookup()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.85rem">
-                        <option value="all">All accounts</option>
-                        <option value="person1">Person 1</option>
-                        <option value="person2">Person 2</option>
-                        <option value="joint">Joint</option>
-                    </select>
+                Savings Transactions
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <span style="font-size:0.75rem;color:var(--text-dim)">From</span>
+                    <input type="month" id="savingsTxFrom" onchange="renderSavingsTxHistory()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.85rem">
+                    <span style="font-size:0.75rem;color:var(--text-dim)">to</span>
+                    <input type="month" id="savingsTxTo" onchange="renderSavingsTxHistory()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.85rem">
+                    <button class="btn btn-outline btn-small" onclick="resetSavingsTxRange()">Last 24 months</button>
                 </div>
             </div>
-            <div id="txLookupResults"></div>
+            <div id="savingsTxResults"></div>
         </div>
     </div>
 </div>
@@ -5825,7 +5821,7 @@ function switchDashTab(tab) {
     document.getElementById('dashboardContent').style.display = tab === 'overview' ? 'block' : 'none';
     const fc = document.getElementById('savingsForecastSection');
     if (fc) fc.style.display = tab === 'forecast' ? 'block' : 'none';
-    if (tab === 'forecast') { renderSavingsForecast(); populateTxLookupMonths(); }
+    if (tab === 'forecast') { renderSavingsForecast(); resetSavingsTxRange(); }
 }
 
 function openAddPotModal(potId) {
@@ -5955,59 +5951,79 @@ function deleteExpense(potId, expId) {
     renderSavingsForecast();
 }
 
-function populateTxLookupMonths() {
-    const sel = document.getElementById('txLookupMonth');
-    if (!sel) return;
-    const months = [...new Set(store.transactions.filter(t => t.date).map(t => t.date.substring(0,7)))].sort().reverse();
-    const current = sel.value;
-    sel.innerHTML = '<option value="">— pick a month —</option>' +
-        months.map(m => `<option value="${m}" ${m === current ? 'selected' : ''}>${formatMonth(m)}</option>`).join('');
+function isSavingsTransaction(t) {
+    // Matches Savings parent category and all its children
+    const cat = (t.category || '').toLowerCase();
+    return cat === 'savings' || cat === 'emergency fund' || cat === 'isa' ||
+        (CATEGORY_TREE['Savings']?.children && Object.keys(CATEGORY_TREE['Savings'].children).map(k=>k.toLowerCase()).includes(cat));
 }
 
-function renderTxLookup() {
-    const month = document.getElementById('txLookupMonth')?.value;
-    const account = document.getElementById('txLookupAccount')?.value || 'all';
-    const el = document.getElementById('txLookupResults');
+function resetSavingsTxRange() {
+    const now = new Date();
+    const to = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    const from24 = new Date(now.getFullYear(), now.getMonth() - 23, 1);
+    const from = `${from24.getFullYear()}-${String(from24.getMonth()+1).padStart(2,'0')}`;
+    const fromEl = document.getElementById('savingsTxFrom');
+    const toEl = document.getElementById('savingsTxTo');
+    if (fromEl) fromEl.value = from;
+    if (toEl) toEl.value = to;
+    renderSavingsTxHistory();
+}
+
+function renderSavingsTxHistory() {
+    const el = document.getElementById('savingsTxResults');
     if (!el) return;
-    if (!month) { el.innerHTML = ''; return; }
+    const fromVal = document.getElementById('savingsTxFrom')?.value;
+    const toVal = document.getElementById('savingsTxTo')?.value;
+    if (!fromVal || !toVal) { el.innerHTML = ''; return; }
 
-    let txs = store.transactions.filter(t => t.date && t.date.startsWith(month));
-    if (account !== 'all') txs = txs.filter(t => t.account === account);
-    txs = txs.sort((a,b) => (b.date||'').localeCompare(a.date||''));
-
-    const debits = txs.filter(t => t.amount < 0);
-    const credits = txs.filter(t => t.amount > 0);
-    const totalSpent = debits.reduce((s,t) => s + Math.abs(t.amount), 0);
-    const totalIn = credits.reduce((s,t) => s + t.amount, 0);
+    const txs = store.transactions
+        .filter(t => t.date && isSavingsTransaction(t) && t.date.substring(0,7) >= fromVal && t.date.substring(0,7) <= toVal)
+        .sort((a,b) => (b.date||'').localeCompare(a.date||''));
 
     if (txs.length === 0) {
-        el.innerHTML = '<p style="color:var(--text-dim);padding:16px 0">No transactions found for this month.</p>';
+        el.innerHTML = '<p style="color:var(--text-dim);padding:16px 0">No savings transactions found in this period.</p>';
         return;
     }
 
-    // Category breakdown
-    const catTotals = {};
-    debits.forEach(t => { const c = t.category || 'Other'; catTotals[c] = (catTotals[c]||0) + Math.abs(t.amount); });
-    const topCats = Object.entries(catTotals).sort((a,b) => b[1]-a[1]).slice(0,5);
+    const totalOut = txs.filter(t=>t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
+    const totalIn  = txs.filter(t=>t.amount>0).reduce((s,t)=>s+t.amount,0);
+
+    // Group by month for totals
+    const byMonth = {};
+    txs.forEach(t => {
+        const m = t.date.substring(0,7);
+        if (!byMonth[m]) byMonth[m] = { in: 0, out: 0, txs: [] };
+        if (t.amount > 0) byMonth[m].in += t.amount;
+        else byMonth[m].out += Math.abs(t.amount);
+        byMonth[m].txs.push(t);
+    });
 
     el.innerHTML = `
         <div style="display:flex;gap:24px;padding:12px 0 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
-            <div><span style="font-size:1.4rem;font-weight:700;color:var(--red)">£${totalSpent.toFixed(2)}</span><div style="font-size:0.75rem;color:var(--text-dim)">Total Spent</div></div>
-            <div><span style="font-size:1.4rem;font-weight:700;color:var(--green)">£${totalIn.toFixed(2)}</span><div style="font-size:0.75rem;color:var(--text-dim)">Total In</div></div>
+            <div><span style="font-size:1.4rem;font-weight:700;color:var(--green)">£${totalIn.toFixed(2)}</span><div style="font-size:0.75rem;color:var(--text-dim)">Saved In</div></div>
+            <div><span style="font-size:1.4rem;font-weight:700;color:var(--red)">£${totalOut.toFixed(2)}</span><div style="font-size:0.75rem;color:var(--text-dim)">Withdrawn</div></div>
+            <div><span style="font-size:1.4rem;font-weight:700;color:${totalIn-totalOut>=0?'var(--green)':'var(--red)'}">£${Math.abs(totalIn-totalOut).toFixed(2)}</span><div style="font-size:0.75rem;color:var(--text-dim)">Net ${totalIn-totalOut>=0?'Saved':'Withdrawn'}</div></div>
             <div><span style="font-size:1.4rem;font-weight:700;color:var(--text)">${txs.length}</span><div style="font-size:0.75rem;color:var(--text-dim)">Transactions</div></div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                ${topCats.map(([c,v]) => `<span style="background:var(--surface2);border-radius:12px;padding:3px 10px;font-size:0.78rem;color:var(--text-dim)">${getCatEmoji(c)} ${c} £${v.toFixed(0)}</span>`).join('')}
-            </div>
         </div>
-        <div class="drilldown-tx-list" style="margin-top:12px;max-height:400px;overflow-y:auto">
-            ${txs.map(t => `
-                <div class="drilldown-tx-item">
-                    <span style="min-width:80px;color:var(--text-dim);font-size:0.82rem">${formatDate(t.date)}</span>
-                    <span class="drilldown-tx-desc" style="flex:1" title="${escapeHtml(t.description||'')}">${t.description||''}</span>
-                    <span style="font-size:0.75rem;color:var(--text-dim);min-width:80px;text-align:right">${getCatEmoji(t.category||'Other')} ${t.category||'Other'}</span>
-                    <span style="font-weight:600;min-width:80px;text-align:right;color:${t.amount<0?'var(--red)':'var(--green)'}">£${Math.abs(t.amount).toFixed(2)}</span>
-                </div>`).join('')}
-        </div>`;
+        ${Object.entries(byMonth).sort((a,b)=>b[0].localeCompare(a[0])).map(([m, data]) => `
+            <div style="margin-top:16px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                    <span style="font-weight:600;color:var(--text)">${formatMonth(m)}</span>
+                    <span style="font-size:0.82rem;color:var(--text-dim)">
+                        ${data.in > 0 ? `<span style="color:var(--green)">+£${data.in.toFixed(2)}</span>` : ''}
+                        ${data.out > 0 ? `<span style="color:var(--red);margin-left:8px">-£${data.out.toFixed(2)}</span>` : ''}
+                    </span>
+                </div>
+                ${data.txs.map(t => `
+                    <div class="drilldown-tx-item">
+                        <span style="min-width:80px;color:var(--text-dim);font-size:0.82rem">${formatDate(t.date)}</span>
+                        <span class="drilldown-tx-desc" style="flex:1" title="${escapeHtml(t.description||'')}">${t.description||''}</span>
+                        <span style="font-size:0.75rem;color:var(--text-dim);min-width:90px;text-align:right">${getCatEmoji(t.category||'Other')} ${t.category||'Other'}</span>
+                        <span style="font-weight:600;min-width:80px;text-align:right;color:${t.amount>0?'var(--green)':'var(--red)'}">£${Math.abs(t.amount).toFixed(2)}</span>
+                    </div>`).join('')}
+            </div>`).join('')}`;
+}
 }
 
 function renderSavingsForecast() {
