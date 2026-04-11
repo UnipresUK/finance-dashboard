@@ -6035,6 +6035,7 @@ function renderForecastTable(pots, el) {
                     const [y,mo] = m.split('-');
                     return `<th style="text-align:right;padding:8px 6px;color:var(--text-dim);font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap">${names[parseInt(mo)-1]}<br><span style="font-size:0.7rem">${y.slice(2)}</span></th>`;
                 }).join('')}
+                <th style="text-align:right;padding:8px 12px;color:var(--text-dim);font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap">Total</th>
             </tr>
         </thead>
         <tbody>`;
@@ -6066,6 +6067,7 @@ function renderForecastTable(pots, el) {
                     ${hasExp ? `<div style="font-size:0.7rem;color:var(--accent)">-£${monthlyExpenses[i].total.toFixed(0)}</div>` : ''}
                 </td>`;
             }).join('')}
+            <td style="text-align:right;padding:8px 12px;font-weight:700;color:${monthlyBalances[monthlyBalances.length-1] < 0 ? 'var(--red)' : 'var(--green)'}">£${Math.abs(monthlyBalances[monthlyBalances.length-1]).toFixed(0)}</td>
         </tr>`;
 
         // Expense sub-rows — one row per unique expense/group, amounts shown in correct month columns
@@ -6083,6 +6085,7 @@ function renderForecastTable(pots, el) {
             const amountByMonth = {};
             (rep.groupId ? expenses.filter(e => e.groupId === rep.groupId) : [rep])
                 .forEach(e => { amountByMonth[e.month] = (amountByMonth[e.month] || 0) + e.amount; });
+            const expTotal = Object.values(amountByMonth).reduce((s,v) => s+v, 0);
             html += `<tr style="background:rgba(108,92,231,0.04)">
                 <td style="padding:4px 12px 4px 24px;color:var(--text-dim);font-size:0.78rem">↳ ${rep.name}</td>
                 ${months.map(m => {
@@ -6091,6 +6094,7 @@ function renderForecastTable(pots, el) {
                         ${amt ? `-£${amt.toFixed(0)}` : '-'}
                     </td>`;
                 }).join('')}
+                <td style="text-align:right;padding:4px 12px;font-size:0.78rem;font-weight:600;color:var(--red)">-£${expTotal.toFixed(0)}</td>
             </tr>`;
         });
     });
@@ -6106,12 +6110,14 @@ function renderForecastTable(pots, el) {
         });
     });
 
+    const lastColTotal = potBalances.reduce((s,arr) => s + arr[arr.length-1], 0);
     html += `<tr style="border-top:2px solid var(--border);background:var(--surface2)">
         <td style="padding:10px 12px;font-weight:700;color:var(--text)">Total Savings</td>
         ${months.map((_,i) => {
             const total = potBalances.reduce((s,arr) => s + arr[i], 0);
             return `<td style="text-align:right;padding:8px 6px;font-weight:700;color:${total < 0 ? 'var(--red)' : 'var(--green)'}">£${Math.abs(total).toFixed(0)}</td>`;
         }).join('')}
+        <td style="text-align:right;padding:8px 12px;font-weight:700;color:${lastColTotal < 0 ? 'var(--red)' : 'var(--green)'}">£${Math.abs(lastColTotal).toFixed(0)}</td>
     </tr>`;
 
     html += `</tbody></table></div></div>`;
