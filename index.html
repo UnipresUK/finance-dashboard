@@ -5935,7 +5935,9 @@ function saveExpense() {
     saveStore();
     if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
     closeExpenseModal();
+    autoImportForecastExpenses(); // import any past instalments immediately
     renderSavingsForecast();
+    renderSavingsTxHistory();
 }
 
 function deleteExpense(potId, expId) {
