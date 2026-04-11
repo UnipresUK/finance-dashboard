@@ -1540,17 +1540,11 @@
         <div id="savingsPotsContainer"></div>
         <div id="savingsForecastTable" style="margin-top:24px;overflow-x:auto"></div>
 
-        <!-- Savings Transactions -->
+        <!-- Manual Savings Transactions -->
         <div class="card" style="margin-top:24px">
             <div class="card-title">
                 Savings Transactions
-                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                    <span style="font-size:0.75rem;color:var(--text-dim)">From</span>
-                    <input type="month" id="savingsTxFrom" onchange="renderSavingsTxHistory()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.85rem">
-                    <span style="font-size:0.75rem;color:var(--text-dim)">to</span>
-                    <input type="month" id="savingsTxTo" onchange="renderSavingsTxHistory()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.85rem">
-                    <button class="btn btn-outline btn-small" onclick="resetSavingsTxRange()">Last 24 months</button>
-                </div>
+                <button class="btn btn-primary btn-small" onclick="openSavingsTxModal()">+ Add Transaction</button>
             </div>
             <div id="savingsTxResults"></div>
         </div>
@@ -2309,7 +2303,8 @@ function buildSettingsPayload() {
         recurringLabels: store.settings.recurringLabels || {},
         recurringIgnoredFlags: store.settings.recurringIgnoredFlags || {},
         savingsGoals: store.settings.savingsGoals || [],
-        savingsForecast: store.settings.savingsForecast || []
+        savingsForecast: store.settings.savingsForecast || [],
+        manualSavingsTx: store.settings.manualSavingsTx || []
     };
 }
 
@@ -2407,6 +2402,8 @@ async function syncFromSheet() {
             if (sheetGoals) store.settings.savingsGoals = sheetGoals;
             const sheetForecast = parseJsonSetting(data.settings.savingsForecast, null);
             if (sheetForecast) store.settings.savingsForecast = sheetForecast;
+            const sheetManualTx = parseJsonSetting(data.settings.manualSavingsTx, null);
+            if (sheetManualTx) store.settings.manualSavingsTx = sheetManualTx;
         }
 
         // Merge custom categories
@@ -5821,7 +5818,7 @@ function switchDashTab(tab) {
     document.getElementById('dashboardContent').style.display = tab === 'overview' ? 'block' : 'none';
     const fc = document.getElementById('savingsForecastSection');
     if (fc) fc.style.display = tab === 'forecast' ? 'block' : 'none';
-    if (tab === 'forecast') { renderSavingsForecast(); resetSavingsTxRange(); }
+    if (tab === 'forecast') { renderSavingsForecast(); renderSavingsTxHistory(); }
 }
 
 function openAddPotModal(potId) {
@@ -5951,45 +5948,75 @@ function deleteExpense(potId, expId) {
     renderSavingsForecast();
 }
 
-function isSavingsTransaction(t) {
-    // Matches Savings parent category and all its children
-    const cat = (t.category || '').toLowerCase();
-    return cat === 'savings' || cat === 'emergency fund' || cat === 'isa' ||
-        (CATEGORY_TREE['Savings']?.children && Object.keys(CATEGORY_TREE['Savings'].children).map(k=>k.toLowerCase()).includes(cat));
+// ===================== MANUAL SAVINGS TRANSACTIONS =====================
+let savingsTxType = 'in';
+
+function setSavingsTxType(type) {
+    savingsTxType = type;
+    document.getElementById('savingsTxTypeIn').classList.toggle('active', type === 'in');
+    document.getElementById('savingsTxTypeOut').classList.toggle('active', type === 'out');
 }
 
-function resetSavingsTxRange() {
-    const now = new Date();
-    const to = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-    const from24 = new Date(now.getFullYear(), now.getMonth() - 23, 1);
-    const from = `${from24.getFullYear()}-${String(from24.getMonth()+1).padStart(2,'0')}`;
-    const fromEl = document.getElementById('savingsTxFrom');
-    const toEl = document.getElementById('savingsTxTo');
-    if (fromEl) fromEl.value = from;
-    if (toEl) toEl.value = to;
+function openSavingsTxModal() {
+    const pots = store.settings.savingsForecast || [];
+    const sel = document.getElementById('savingsTxPot');
+    if (sel) {
+        sel.innerHTML = '<option value="">— General —</option>' +
+            pots.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    }
+    // Default date to today
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    document.getElementById('savingsTxDate').value = todayStr;
+    document.getElementById('savingsTxDesc').value = '';
+    document.getElementById('savingsTxAmount').value = '';
+    setSavingsTxType('in');
+    document.getElementById('savingsTxModal').style.display = 'flex';
+}
+
+function closeSavingsTxModal() {
+    document.getElementById('savingsTxModal').style.display = 'none';
+}
+
+function saveSavingsTx() {
+    const date = document.getElementById('savingsTxDate').value;
+    const desc = document.getElementById('savingsTxDesc').value.trim();
+    const amount = parseFloat(document.getElementById('savingsTxAmount').value) || 0;
+    const potId = document.getElementById('savingsTxPot').value;
+    if (!date || !amount) return showToast('Enter a date and amount', 'error');
+    const signedAmount = savingsTxType === 'in' ? amount : -amount;
+    if (!store.settings.manualSavingsTx) store.settings.manualSavingsTx = [];
+    store.settings.manualSavingsTx.push({
+        id: Date.now().toString(), date, description: desc, amount: signedAmount, potId
+    });
+    store.settings.manualSavingsTx.sort((a,b) => b.date.localeCompare(a.date));
+    saveStore();
+    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    closeSavingsTxModal();
+    renderSavingsTxHistory();
+}
+
+function deleteManualSavingsTx(id) {
+    store.settings.manualSavingsTx = (store.settings.manualSavingsTx || []).filter(t => t.id !== id);
+    saveStore();
+    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
     renderSavingsTxHistory();
 }
 
 function renderSavingsTxHistory() {
     const el = document.getElementById('savingsTxResults');
     if (!el) return;
-    const fromVal = document.getElementById('savingsTxFrom')?.value;
-    const toVal = document.getElementById('savingsTxTo')?.value;
-    if (!fromVal || !toVal) { el.innerHTML = ''; return; }
-
-    const txs = store.transactions
-        .filter(t => t.date && isSavingsTransaction(t) && t.date.substring(0,7) >= fromVal && t.date.substring(0,7) <= toVal)
-        .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+    const txs = (store.settings.manualSavingsTx || []).sort((a,b) => b.date.localeCompare(a.date));
+    const pots = store.settings.savingsForecast || [];
 
     if (txs.length === 0) {
-        el.innerHTML = '<p style="color:var(--text-dim);padding:16px 0">No savings transactions found in this period.</p>';
+        el.innerHTML = '<p style="color:var(--text-dim);padding:16px 0">No savings transactions yet. Click "+ Add Transaction" to log one.</p>';
         return;
     }
 
-    const totalOut = txs.filter(t=>t.amount<0).reduce((s,t)=>s+Math.abs(t.amount),0);
-    const totalIn  = txs.filter(t=>t.amount>0).reduce((s,t)=>s+t.amount,0);
+    const totalIn  = txs.filter(t=>t.amount>0).reduce((s,t)=>s+t.amount, 0);
+    const totalOut = txs.filter(t=>t.amount<0).reduce((s,t)=>s+Math.abs(t.amount), 0);
 
-    // Group by month for totals
     const byMonth = {};
     txs.forEach(t => {
         const m = t.date.substring(0,7);
@@ -6001,27 +6028,30 @@ function renderSavingsTxHistory() {
 
     el.innerHTML = `
         <div style="display:flex;gap:24px;padding:12px 0 16px;border-bottom:1px solid var(--border);flex-wrap:wrap">
-            <div><span style="font-size:1.4rem;font-weight:700;color:var(--green)">£${totalIn.toFixed(2)}</span><div style="font-size:0.75rem;color:var(--text-dim)">Saved In</div></div>
+            <div><span style="font-size:1.4rem;font-weight:700;color:var(--green)">£${totalIn.toFixed(2)}</span><div style="font-size:0.75rem;color:var(--text-dim)">Total In</div></div>
             <div><span style="font-size:1.4rem;font-weight:700;color:var(--red)">£${totalOut.toFixed(2)}</span><div style="font-size:0.75rem;color:var(--text-dim)">Withdrawn</div></div>
-            <div><span style="font-size:1.4rem;font-weight:700;color:${totalIn-totalOut>=0?'var(--green)':'var(--red)'}">£${Math.abs(totalIn-totalOut).toFixed(2)}</span><div style="font-size:0.75rem;color:var(--text-dim)">Net ${totalIn-totalOut>=0?'Saved':'Withdrawn'}</div></div>
-            <div><span style="font-size:1.4rem;font-weight:700;color:var(--text)">${txs.length}</span><div style="font-size:0.75rem;color:var(--text-dim)">Transactions</div></div>
+            <div><span style="font-size:1.4rem;font-weight:700;color:${totalIn-totalOut>=0?'var(--green)':'var(--red)'}">£${Math.abs(totalIn-totalOut).toFixed(2)}</span><div style="font-size:0.75rem;color:var(--text-dim)">Net</div></div>
+            <div><span style="font-size:1.4rem;font-weight:700;color:var(--text)">${txs.length}</span><div style="font-size:0.75rem;color:var(--text-dim)">Entries</div></div>
         </div>
         ${Object.entries(byMonth).sort((a,b)=>b[0].localeCompare(a[0])).map(([m, data]) => `
             <div style="margin-top:16px">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
                     <span style="font-weight:600;color:var(--text)">${formatMonth(m)}</span>
-                    <span style="font-size:0.82rem;color:var(--text-dim)">
+                    <span style="font-size:0.82rem">
                         ${data.in > 0 ? `<span style="color:var(--green)">+£${data.in.toFixed(2)}</span>` : ''}
                         ${data.out > 0 ? `<span style="color:var(--red);margin-left:8px">-£${data.out.toFixed(2)}</span>` : ''}
                     </span>
                 </div>
-                ${data.txs.map(t => `
-                    <div class="drilldown-tx-item">
+                ${data.txs.map(t => {
+                    const pot = t.potId ? pots.find(p=>p.id===t.potId) : null;
+                    return `<div class="drilldown-tx-item">
                         <span style="min-width:80px;color:var(--text-dim);font-size:0.82rem">${formatDate(t.date)}</span>
-                        <span class="drilldown-tx-desc" style="flex:1" title="${escapeHtml(t.description||'')}">${t.description||''}</span>
-                        <span style="font-size:0.75rem;color:var(--text-dim);min-width:90px;text-align:right">${getCatEmoji(t.category||'Other')} ${t.category||'Other'}</span>
+                        <span class="drilldown-tx-desc" style="flex:1">${t.description || '—'}</span>
+                        ${pot ? `<span style="font-size:0.75rem;color:var(--accent);min-width:100px;text-align:right">🐷 ${pot.name}</span>` : '<span style="min-width:100px"></span>'}
                         <span style="font-weight:600;min-width:80px;text-align:right;color:${t.amount>0?'var(--green)':'var(--red)'}">£${Math.abs(t.amount).toFixed(2)}</span>
-                    </div>`).join('')}
+                        <button style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:0.75rem;margin-left:8px" onclick="deleteManualSavingsTx('${t.id}')">✕</button>
+                    </div>`;
+                }).join('')}
             </div>`).join('')}`;
 }
 
@@ -6416,6 +6446,42 @@ initPinScreen();
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
             <button class="btn btn-outline" onclick="closeExpenseModal()">Cancel</button>
             <button class="btn btn-primary" onclick="saveExpense()">Add</button>
+        </div>
+    </div>
+</div>
+
+<!-- Manual Savings Transaction Modal -->
+<div class="modal-overlay" id="savingsTxModal" style="display:none">
+    <div class="modal-box" style="max-width:400px">
+        <h3 id="savingsTxModalTitle">Add Savings Transaction</h3>
+        <div class="form-group">
+            <label>Date</label>
+            <input type="date" id="savingsTxDate">
+        </div>
+        <div class="form-group">
+            <label>Description</label>
+            <input type="text" id="savingsTxDesc" placeholder="e.g. Transfer to Holiday Account">
+        </div>
+        <div class="form-group">
+            <label>Pot</label>
+            <select id="savingsTxPot" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;width:100%">
+                <option value="">— General —</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Type</label>
+            <div style="display:flex;gap:8px;margin-top:4px">
+                <button class="filter-chip active" id="savingsTxTypeIn" onclick="setSavingsTxType('in')">Money In (+)</button>
+                <button class="filter-chip" id="savingsTxTypeOut" onclick="setSavingsTxType('out')">Withdrawal (−)</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Amount (£)</label>
+            <input type="number" id="savingsTxAmount" placeholder="0.00" step="0.01" min="0">
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+            <button class="btn btn-outline" onclick="closeSavingsTxModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveSavingsTx()">Save</button>
         </div>
     </div>
 </div>
