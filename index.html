@@ -5848,11 +5848,39 @@ function deletePot(potId) {
     renderSavingsForecast();
 }
 
+let expenseType = 'once';
+
+function setExpenseType(type) {
+    expenseType = type;
+    document.getElementById('expTypeOnce').classList.toggle('active', type === 'once');
+    document.getElementById('expTypeSpread').classList.toggle('active', type === 'spread');
+    document.getElementById('expOnceFields').style.display = type === 'once' ? 'block' : 'none';
+    document.getElementById('expSpreadFields').style.display = type === 'spread' ? 'block' : 'none';
+    updateExpensePreview();
+}
+
+function updateExpensePreview() {
+    const preview = document.getElementById('expensePreview');
+    if (!preview) return;
+    const total = parseFloat(document.getElementById('expenseAmount').value) || 0;
+    const n = parseInt(document.getElementById('expenseMonths').value) || 0;
+    if (total && n >= 2) {
+        preview.textContent = `£${(total / n).toFixed(2)} per month for ${n} months`;
+    } else {
+        preview.textContent = '';
+    }
+}
+
 function openExpenseModal(potId) {
     editingExpensePotId = potId;
+    expenseType = 'once';
     document.getElementById('expenseName').value = '';
     document.getElementById('expenseAmount').value = '';
     document.getElementById('expenseMonth').value = '';
+    document.getElementById('expenseStartMonth').value = '';
+    document.getElementById('expenseMonths').value = '';
+    document.getElementById('expensePreview').textContent = '';
+    setExpenseType('once');
     document.getElementById('savingsExpenseModal').style.display = 'flex';
 }
 
@@ -5860,13 +5888,32 @@ function closeExpenseModal() { document.getElementById('savingsExpenseModal').st
 
 function saveExpense() {
     const name = document.getElementById('expenseName').value.trim();
-    const amount = parseFloat(document.getElementById('expenseAmount').value) || 0;
-    const month = document.getElementById('expenseMonth').value;
-    if (!name || !amount || !month) return showToast('Fill in all fields', 'error');
+    const total = parseFloat(document.getElementById('expenseAmount').value) || 0;
+    if (!name || !total) return showToast('Enter a name and amount', 'error');
     const pot = (store.settings.savingsForecast || []).find(p => p.id === editingExpensePotId);
     if (!pot) return;
     if (!pot.expenses) pot.expenses = [];
-    pot.expenses.push({ id: Date.now().toString(), name, amount, month });
+
+    if (expenseType === 'once') {
+        const month = document.getElementById('expenseMonth').value;
+        if (!month) return showToast('Select a month', 'error');
+        pot.expenses.push({ id: Date.now().toString(), name, amount: total, month });
+    } else {
+        const startMonth = document.getElementById('expenseStartMonth').value;
+        const n = parseInt(document.getElementById('expenseMonths').value) || 0;
+        if (!startMonth || n < 2) return showToast('Enter a start month and at least 2 months', 'error');
+        const monthly = parseFloat((total / n).toFixed(2));
+        const groupId = Date.now().toString();
+        const [sy, sm] = startMonth.split('-').map(Number);
+        for (let i = 0; i < n; i++) {
+            const d = new Date(sy, sm - 1 + i, 1);
+            const m = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+            // Last instalment gets any rounding remainder
+            const amt = i === n - 1 ? parseFloat((total - monthly * (n - 1)).toFixed(2)) : monthly;
+            pot.expenses.push({ id: groupId + '_' + i, name, amount: amt, month: m, groupId, groupTotal: total, groupN: n });
+        }
+    }
+
     pot.expenses.sort((a,b) => a.month.localeCompare(b.month));
     saveStore();
     if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
@@ -5877,7 +5924,13 @@ function saveExpense() {
 function deleteExpense(potId, expId) {
     const pot = (store.settings.savingsForecast || []).find(p => p.id === potId);
     if (!pot) return;
-    pot.expenses = pot.expenses.filter(e => e.id !== expId);
+    const exp = pot.expenses.find(e => e.id === expId);
+    if (exp && exp.groupId) {
+        // Delete all instalments in the group
+        pot.expenses = pot.expenses.filter(e => e.groupId !== exp.groupId);
+    } else {
+        pot.expenses = pot.expenses.filter(e => e.id !== expId);
+    }
     saveStore();
     if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
     renderSavingsForecast();
@@ -5921,15 +5974,36 @@ function renderSavingsForecast() {
                     </div>
                 </div>
                 <div style="margin-bottom:10px">
-                    ${(pot.expenses||[]).map(e => `
-                        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:0.82rem">
-                            <span style="color:var(--text)">${e.name}</span>
-                            <span style="display:flex;align-items:center;gap:8px">
-                                <span style="color:var(--text-dim)">${formatMonth(e.month)}</span>
-                                <span style="color:var(--red);font-weight:600">£${e.amount.toFixed(2)}</span>
-                                <button style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:0.75rem" onclick="deleteExpense('${pot.id}','${e.id}')">✕</button>
-                            </span>
-                        </div>`).join('')}
+                    ${(() => {
+                        const expenses = pot.expenses || [];
+                        // Group spread payments, show singles as-is
+                        const seen = new Set();
+                        return expenses.map(e => {
+                            if (e.groupId) {
+                                if (seen.has(e.groupId)) return '';
+                                seen.add(e.groupId);
+                                const all = expenses.filter(x => x.groupId === e.groupId);
+                                const startMo = formatMonth(all[0].month);
+                                const endMo = formatMonth(all[all.length-1].month);
+                                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:0.82rem">
+                                    <span style="color:var(--text)">${e.name}</span>
+                                    <span style="display:flex;align-items:center;gap:8px">
+                                        <span style="color:var(--text-dim);font-size:0.75rem">£${e.amount.toFixed(2)}/mo · ${startMo}–${endMo}</span>
+                                        <span style="color:var(--red);font-weight:600">£${e.groupTotal.toFixed(2)}</span>
+                                        <button style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:0.75rem" onclick="deleteExpense('${pot.id}','${e.id}')">✕</button>
+                                    </span>
+                                </div>`;
+                            }
+                            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:0.82rem">
+                                <span style="color:var(--text)">${e.name}</span>
+                                <span style="display:flex;align-items:center;gap:8px">
+                                    <span style="color:var(--text-dim)">${formatMonth(e.month)}</span>
+                                    <span style="color:var(--red);font-weight:600">£${e.amount.toFixed(2)}</span>
+                                    <button style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:0.75rem" onclick="deleteExpense('${pot.id}','${e.id}')">✕</button>
+                                </span>
+                            </div>`;
+                        }).join('');
+                    })()}
                 </div>
                 <button class="btn btn-outline btn-small" style="width:100%" onclick="openExpenseModal('${pot.id}')">+ Add Planned Expense</button>
             </div>`;
@@ -6196,19 +6270,40 @@ initPinScreen();
 
 <!-- Savings Expense Modal -->
 <div class="modal-overlay" id="savingsExpenseModal" style="display:none">
-    <div class="modal-box" style="max-width:380px">
+    <div class="modal-box" style="max-width:420px">
         <h3>Add Planned Expense</h3>
         <div class="form-group">
             <label>Description</label>
             <input type="text" id="expenseName" placeholder="e.g. Crete Holiday">
         </div>
         <div class="form-group">
-            <label>Amount (£)</label>
-            <input type="number" id="expenseAmount" placeholder="0.00" step="0.01">
+            <label>Total Amount (£)</label>
+            <input type="number" id="expenseAmount" placeholder="0.00" step="0.01" oninput="updateExpensePreview()">
         </div>
+        <!-- Type toggle -->
         <div class="form-group">
-            <label>Month Needed</label>
+            <label>Payment type</label>
+            <div style="display:flex;gap:8px;margin-top:4px">
+                <button class="filter-chip active" id="expTypeOnce" onclick="setExpenseType('once')">One-off</button>
+                <button class="filter-chip" id="expTypeSpread" onclick="setExpenseType('spread')">Spread over months</button>
+            </div>
+        </div>
+        <!-- One-off: single month -->
+        <div id="expOnceFields" class="form-group">
+            <label>Month needed</label>
             <input type="month" id="expenseMonth">
+        </div>
+        <!-- Spread: start month + number of months -->
+        <div id="expSpreadFields" style="display:none">
+            <div class="form-group">
+                <label>Starting month</label>
+                <input type="month" id="expenseStartMonth" oninput="updateExpensePreview()">
+            </div>
+            <div class="form-group">
+                <label>Number of months</label>
+                <input type="number" id="expenseMonths" min="2" max="60" placeholder="e.g. 12" oninput="updateExpensePreview()">
+            </div>
+            <div id="expensePreview" style="font-size:0.82rem;color:var(--accent);margin-top:4px"></div>
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
             <button class="btn btn-outline" onclick="closeExpenseModal()">Cancel</button>
