@@ -2035,6 +2035,9 @@ function unlockApp() {
         if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
     }
 
+    // Auto-import any past forecast expenses into manual savings log
+    autoImportForecastExpenses();
+
     try {
         renderDashboard();
     } catch (err) {
@@ -2424,6 +2427,8 @@ async function syncFromSheet() {
 
         // Migrate old categories to new hierarchy
         migrateCategories();
+        // Auto-import past forecast expenses into manual savings log
+        autoImportForecastExpenses();
         saveStoreEncrypted();
         try { renderDashboard(); } catch(e) { console.error('[SYNC] Render error:', e); }
 
@@ -6053,6 +6058,49 @@ function renderSavingsTxHistory() {
                     </div>`;
                 }).join('')}
             </div>`).join('')}`;
+}
+
+function autoImportForecastExpenses() {
+    const pots = store.settings.savingsForecast || [];
+    if (pots.length === 0) return;
+
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+    if (!store.settings.manualSavingsTx) store.settings.manualSavingsTx = [];
+
+    // Track already-imported expense IDs to avoid duplicates
+    const importedIds = new Set(
+        store.settings.manualSavingsTx
+            .filter(t => t.autoImportedExpenseId)
+            .map(t => t.autoImportedExpenseId)
+    );
+
+    let added = 0;
+    pots.forEach(pot => {
+        (pot.expenses || []).forEach(exp => {
+            // Only import if the expense month has passed (strictly before current month)
+            if (exp.month >= currentMonth) return;
+            // Skip if already imported
+            if (importedIds.has(exp.id)) return;
+
+            store.settings.manualSavingsTx.push({
+                id: Date.now().toString() + '_' + exp.id,
+                date: exp.month + '-01',
+                description: exp.name,
+                amount: -Math.abs(exp.amount), // withdrawals are negative
+                potId: pot.id,
+                autoImportedExpenseId: exp.id
+            });
+            added++;
+        });
+    });
+
+    if (added > 0) {
+        store.settings.manualSavingsTx.sort((a,b) => b.date.localeCompare(a.date));
+        saveStore();
+        if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    }
 }
 
 function renderSavingsForecast() {
