@@ -6068,18 +6068,31 @@ function renderForecastTable(pots, el) {
             }).join('')}
         </tr>`;
 
-        // Expense sub-rows
-        const allExpMonths = new Set((pot.expenses||[]).map(e => e.month));
-        if (allExpMonths.size > 0) {
-            (pot.expenses||[]).forEach(exp => {
-                html += `<tr style="background:rgba(108,92,231,0.04)">
-                    <td style="padding:4px 12px 4px 24px;color:var(--text-dim);font-size:0.78rem">↳ ${exp.name}</td>
-                    ${months.map(m => `<td style="text-align:right;padding:4px 6px;font-size:0.78rem;color:${m === exp.month ? 'var(--red)' : 'transparent'}">
-                        ${m === exp.month ? `-£${exp.amount.toFixed(0)}` : '-'}
-                    </td>`).join('')}
-                </tr>`;
-            });
-        }
+        // Expense sub-rows — one row per unique expense/group, amounts shown in correct month columns
+        const expenses = pot.expenses || [];
+        const seenGroups = new Set();
+        const uniqueExpenses = expenses.filter(e => {
+            if (e.groupId) {
+                if (seenGroups.has(e.groupId)) return false;
+                seenGroups.add(e.groupId);
+            }
+            return true;
+        });
+        uniqueExpenses.forEach(rep => {
+            // Collect all monthly amounts for this expense/group
+            const amountByMonth = {};
+            (rep.groupId ? expenses.filter(e => e.groupId === rep.groupId) : [rep])
+                .forEach(e => { amountByMonth[e.month] = (amountByMonth[e.month] || 0) + e.amount; });
+            html += `<tr style="background:rgba(108,92,231,0.04)">
+                <td style="padding:4px 12px 4px 24px;color:var(--text-dim);font-size:0.78rem">↳ ${rep.name}</td>
+                ${months.map(m => {
+                    const amt = amountByMonth[m];
+                    return `<td style="text-align:right;padding:4px 6px;font-size:0.78rem;color:${amt ? 'var(--red)' : 'transparent'}">
+                        ${amt ? `-£${amt.toFixed(0)}` : '-'}
+                    </td>`;
+                }).join('')}
+            </tr>`;
+        });
     });
 
     // Totals row
