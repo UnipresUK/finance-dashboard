@@ -1533,9 +1533,12 @@
 
     <!-- Savings Forecast Section -->
     <div id="savingsForecastSection" style="display:none;padding:24px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:8px">
             <h2 style="margin:0;font-size:1.2rem;color:var(--text)">Savings Forecast</h2>
-            <button class="btn btn-primary" onclick="openAddPotModal()">+ Add Savings Pot</button>
+            <div style="display:flex;gap:8px;align-items:center">
+                <button class="btn btn-outline" onclick="forceSyncSavings()" id="forceSyncBtn" style="font-size:0.8rem;padding:6px 12px">☁️ Push to Sheet</button>
+                <button class="btn btn-primary" onclick="openAddPotModal()">+ Add Savings Pot</button>
+            </div>
         </div>
         <div id="savingsPotsContainer"></div>
         <div id="savingsForecastTable" style="margin-top:24px;overflow-x:auto"></div>
@@ -6156,6 +6159,27 @@ function autoImportForecastExpenses() {
         store.settings.manualSavingsTx.sort((a,b) => b.date.localeCompare(a.date));
         saveStore();
         if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    }
+}
+
+async function forceSyncSavings() {
+    const btn = document.getElementById('forceSyncBtn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Syncing...'; }
+    try {
+        if (!getApiUrl()) { showToast('No API URL configured', 'error'); return; }
+        // First pull from sheet to merge any data already there
+        await syncFromSheet();
+        // Then push everything local (including savings pots, expenses, transactions)
+        const result = await apiCall('saveSettings', { settings: buildSettingsPayload() });
+        if (result !== null) {
+            showToast('✓ Savings data pushed to Google Sheets', 'success');
+            renderSavingsForecast();
+            renderSavingsTxHistory();
+        } else {
+            showToast('Push failed — check your connection', 'error');
+        }
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '☁️ Push to Sheet'; }
     }
 }
 
