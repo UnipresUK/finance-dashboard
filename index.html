@@ -1535,7 +1535,8 @@
     <div id="savingsForecastSection" style="display:none;padding:24px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:8px">
             <h2 style="margin:0;font-size:1.2rem;color:var(--text)">Savings Forecast</h2>
-            <div style="display:flex;gap:8px;align-items:center">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <button class="btn btn-outline" onclick="diagnoseSavings()" style="font-size:0.8rem;padding:6px 12px">🔍 Check Data</button>
                 <button class="btn btn-outline" onclick="forceSyncSavings()" id="forceSyncBtn" style="font-size:0.8rem;padding:6px 12px">☁️ Push to Sheet</button>
                 <button class="btn btn-primary" onclick="openAddPotModal()">+ Add Savings Pot</button>
             </div>
@@ -6180,6 +6181,54 @@ async function forceSyncSavings() {
         }
     } finally {
         if (btn) { btn.disabled = false; btn.textContent = '☁️ Push to Sheet'; }
+    }
+}
+
+async function diagnoseSavings() {
+    const localPots = (store.settings.savingsForecast || []);
+    const localTx = (store.settings.manualSavingsTx || []);
+
+    let msg = `📱 LOCAL (this browser):\n`;
+    msg += `  Pots: ${localPots.length}\n`;
+    if (localPots.length > 0) msg += `  Names: ${localPots.map(p=>p.name).join(', ')}\n`;
+    msg += `  Manual transactions: ${localTx.length}\n\n`;
+
+    msg += `☁️ FETCHING FROM GOOGLE SHEET...\n`;
+    alert(msg.trim());
+
+    try {
+        const url = getApiUrl();
+        if (!url) { alert('No API URL set'); return; }
+        const resp = await fetch(url + '?action=sync', { method: 'GET', redirect: 'follow' });
+        const text = await resp.text();
+        let data;
+        try { data = JSON.parse(text); } catch(e) { alert('Sheet returned invalid response:\n' + text.substring(0,300)); return; }
+
+        if (!data.ok) { alert('Sheet error: ' + data.error); return; }
+
+        const sheetSettings = data.data?.settings || {};
+        const sheetForecast = sheetSettings.savingsForecast;
+        const sheetTx = sheetSettings.manualSavingsTx;
+
+        const parsedForecast = typeof sheetForecast === 'string' ? JSON.parse(sheetForecast || '[]') : (sheetForecast || []);
+        const parsedTx = typeof sheetTx === 'string' ? JSON.parse(sheetTx || '[]') : (sheetTx || []);
+
+        let sheetMsg = `☁️ GOOGLE SHEET:\n`;
+        sheetMsg += `  Pots: ${parsedForecast.length}\n`;
+        if (parsedForecast.length > 0) sheetMsg += `  Names: ${parsedForecast.map(p=>p.name).join(', ')}\n`;
+        sheetMsg += `  Manual transactions: ${parsedTx.length}\n`;
+        alert(sheetMsg.trim());
+
+        if (parsedForecast.length > 0) {
+            store.settings.savingsForecast = parsedForecast;
+            store.settings.manualSavingsTx = parsedTx;
+            saveStore();
+            renderSavingsForecast();
+            renderSavingsTxHistory();
+            showToast('Loaded ' + parsedForecast.length + ' pots from sheet ✓', 'success');
+        }
+    } catch(e) {
+        alert('Error fetching sheet:\n' + e.message);
     }
 }
 
