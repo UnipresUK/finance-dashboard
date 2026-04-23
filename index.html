@@ -1556,7 +1556,8 @@
     <div class="modal">
         <button class="modal-close" onclick="closeBudgets()">&times;</button>
         <h2>Monthly Budgets</h2>
-        <p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:16px">Set a monthly budget for each category. Leave blank for no budget.</p>
+        <p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:12px">Set a monthly budget for each category. Leave blank for no budget.</p>
+        <div id="budgetAccountTabs" style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap"></div>
         <div class="budget-grid" id="budgetInputs"></div>
         <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
             <button class="btn btn-outline" onclick="closeBudgets()">Cancel</button>
@@ -2051,11 +2052,14 @@ function unlockApp() {
 
     if (url) {
         showToast('Connecting to Google Sheets...', 'info', 30000);
-        syncFromSheet().then(result => {
+        syncFromSheet().then(async result => {
             document.querySelectorAll('.toast.info').forEach(t => t.remove());
             if (result === false) {
                 showConnectionError();
             } else {
+                // Push local settings to sheet so any locally-added savings/budget data
+                // that wasn't yet synced (e.g. entered offline) gets written up
+                try { await apiCall('saveSettings', { settings: buildSettingsPayload() }); } catch(e) {}
                 showToast('Connected & synced ✓', 'success');
                 // Always re-render after sync since syncFromSheet's internal render may have failed silently
                 try { renderDashboard(); } catch(e) { console.error('[UNLOCK] Post-sync render:', e); }
@@ -2295,6 +2299,7 @@ function txHash(tx) {
 }
 
 function buildSettingsPayload() {
+    migrateBudgets();
     return {
         name1: store.settings.name1,
         name2: store.settings.name2,
@@ -2307,7 +2312,8 @@ function buildSettingsPayload() {
         recurringIgnoredFlags: store.settings.recurringIgnoredFlags || {},
         savingsGoals: store.settings.savingsGoals || [],
         savingsForecast: store.settings.savingsForecast || [],
-        manualSavingsTx: store.settings.manualSavingsTx || []
+        manualSavingsTx: store.settings.manualSavingsTx || [],
+        perAccountBudgets: store.budgets
     };
 }
 
@@ -2357,15 +2363,16 @@ async function syncFromSheet() {
             console.log(`[SYNC] Loaded ${store.transactions.length} transactions`);
         }
 
-        // Merge budgets
+        // Merge budgets — sheet rows go into .all slot for backward compat
         if (data.budgets) {
-            const budgets = {};
+            migrateBudgets();
+            const allBudgets = {};
             data.budgets.forEach(b => {
                 const bk = {};
                 Object.keys(b).forEach(k => bk[k.toLowerCase()] = b[k]);
-                if (bk.category && bk.amount) budgets[bk.category] = parseFloat(bk.amount);
+                if (bk.category && bk.amount) allBudgets[bk.category] = parseFloat(bk.amount);
             });
-            store.budgets = budgets;
+            store.budgets.all = allBudgets;
         }
 
         // Merge settings
@@ -2407,6 +2414,10 @@ async function syncFromSheet() {
             if (sheetForecast) store.settings.savingsForecast = sheetForecast;
             const sheetManualTx = parseJsonSetting(data.settings.manualSavingsTx, null);
             if (sheetManualTx) store.settings.manualSavingsTx = sheetManualTx;
+            const sheetPerAccountBudgets = parseJsonSetting(data.settings.perAccountBudgets, null);
+            if (sheetPerAccountBudgets && sheetPerAccountBudgets.all !== undefined) {
+                store.budgets = sheetPerAccountBudgets;
+            }
         }
 
         // Merge custom categories
@@ -2464,7 +2475,10 @@ async function testConnection() {
 
 async function syncNow() {
     await syncFromSheet();
-    showToast('Synced from Google Sheets', 'success');
+    // Push local settings back to sheet so any data entered locally (savings pots, expenses, transactions)
+    // that wasn't yet synced gets written up. This is safe — we push the already-merged result.
+    if (getApiUrl()) await apiCall('saveSettings', { settings: buildSettingsPayload() });
+    showToast('Synced with Google Sheets ✓', 'success');
 }
 
 async function uploadAllToSheet() {
@@ -2485,21 +2499,9 @@ async function uploadAllToSheet() {
     }
 
     // Also save budgets and settings
-    await apiCall('saveBudgets', { budgets: store.budgets });
-    await apiCall('saveSettings', {
-        settings: {
-            name1: store.settings.name1,
-            name2: store.settings.name2,
-            nameJoint: store.settings.nameJoint,
-            customRules: store.settings.customRules,
-            paydayDate: store.settings.paydayDate,
-            monthStartDay: store.settings.monthStartDay,
-            dismissedRecurring: store.settings.dismissedRecurring || [],
-            recurringLabels: store.settings.recurringLabels || {},
-            recurringIgnoredFlags: store.settings.recurringIgnoredFlags || {},
-            savingsGoals: store.settings.savingsGoals || []
-        }
-    });
+    migrateBudgets();
+    await apiCall('saveBudgets', { budgets: store.budgets.all || {} });
+    await apiCall('saveSettings', { settings: buildSettingsPayload() });
 
     // Save custom categories
     const cc = store.settings.customCategories || {};
@@ -3334,6 +3336,23 @@ function closeDupReview(keepSelected) {
 
 // ===================== ACCOUNT HELPERS =====================
 let currentAccount = 'all';
+let activeBudgetAccount = 'all';
+
+function migrateBudgets() {
+    // If budgets is a flat { catName: amount } object (old format), wrap into new per-account structure
+    const b = store.budgets;
+    if (!b) { store.budgets = { all: {}, person1: {}, person2: {}, joint: {} }; return; }
+    if (b.all !== undefined) return; // already new format
+    // Looks like old flat format
+    store.budgets = { all: b, person1: {}, person2: {}, joint: {} };
+}
+
+function getActiveBudgets(account) {
+    account = account || currentAccount;
+    migrateBudgets();
+    const b = store.budgets;
+    return b[account] || b.all || {};
+}
 
 function getAccountName(key) {
     if (key === 'person1') return store.settings.name1;
@@ -3969,7 +3988,7 @@ function openCategoryDrilldown(category) {
     const matchCats = children.length > 0 ? [category, ...children] : [category];
     const txs = getFilteredTransactions().filter(t => matchCats.includes(t.category) && t.amount < 0);
     const totalSpent = txs.reduce((s, t) => s + Math.abs(t.amount), 0);
-    const budgets = store.budgets || {};
+    const budgets = getActiveBudgets();
     const budget = budgets[category] || 0;
 
     // Set header with emoji
@@ -4141,7 +4160,7 @@ function renderBudgetBars(debits) {
         catTotals[cat] = (catTotals[cat] || 0) + Math.abs(t.amount);
     });
 
-    const budgets = store.budgets || {};
+    const budgets = getActiveBudgets();
     // Show parent-level totals with expandable children
     const parentTotals = aggregateByParent(catTotals);
     const grandTotal = Object.values(parentTotals).reduce((s,v) => s + v, 0) || 1;
@@ -4474,7 +4493,7 @@ function simplifyMerchant(desc) {
 
 // ===================== WASTE DETECTION =====================
 function renderWasteItems(debits) {
-    const budgets = store.budgets || {};
+    const budgets = getActiveBudgets();
     const catTotals = {};
     debits.forEach(t => {
         const cat = t.category || 'Other';
@@ -4817,9 +4836,38 @@ function renderAllAccountsOverview() {
 
 // ===================== BUDGET MODAL =====================
 function openBudgets() {
-    const cats = Object.keys(CATEGORIES).filter(c => c !== 'Income' && c !== 'Transfers');
-    const budgets = store.budgets || {};
+    migrateBudgets();
+    renderBudgetModalTabs();
+    renderBudgetModalInputs();
+    document.getElementById('budgetModal').classList.add('show');
+}
 
+function renderBudgetModalTabs() {
+    const tabs = [
+        { key: 'all', label: 'All Accounts' },
+        { key: 'person1', label: store.settings.name1 || 'Person 1' },
+        { key: 'person2', label: store.settings.name2 || 'Person 2' },
+        { key: 'joint', label: store.settings.nameJoint || 'Joint' }
+    ];
+    document.getElementById('budgetAccountTabs').innerHTML = tabs.map(t => `
+        <button onclick="switchBudgetTab('${t.key}')" id="budgetTab_${t.key}"
+            style="padding:5px 12px;border-radius:16px;border:1px solid var(--border);cursor:pointer;font-size:0.8rem;
+                   background:${activeBudgetAccount === t.key ? 'var(--accent)' : 'var(--card)'};
+                   color:${activeBudgetAccount === t.key ? '#fff' : 'var(--text)'};transition:all 0.15s">
+            ${t.label}
+        </button>
+    `).join('');
+}
+
+function switchBudgetTab(account) {
+    activeBudgetAccount = account;
+    renderBudgetModalTabs();
+    renderBudgetModalInputs();
+}
+
+function renderBudgetModalInputs() {
+    const cats = Object.keys(CATEGORIES).filter(c => c !== 'Income' && c !== 'Transfers');
+    const budgets = store.budgets[activeBudgetAccount] || {};
     document.getElementById('budgetInputs').innerHTML = cats.map(cat => `
         <div class="form-group">
             <label style="display:flex;align-items:center;gap:6px">
@@ -4829,8 +4877,6 @@ function openBudgets() {
             <input type="number" id="budget_${cat.replace(/\s+/g,'_')}" value="${budgets[cat] || ''}" placeholder="£0" min="0" step="10">
         </div>
     `).join('');
-
-    document.getElementById('budgetModal').classList.add('show');
 }
 
 function closeBudgets() {
@@ -4838,18 +4884,24 @@ function closeBudgets() {
 }
 
 function saveBudgets() {
+    migrateBudgets();
     const cats = Object.keys(CATEGORIES).filter(c => c !== 'Income' && c !== 'Transfers');
     const budgets = {};
     cats.forEach(cat => {
         const val = parseFloat(document.getElementById('budget_' + cat.replace(/\s+/g,'_')).value);
         if (val > 0) budgets[cat] = val;
     });
-    store.budgets = budgets;
+    store.budgets[activeBudgetAccount] = budgets;
     saveStore();
     closeBudgets();
     renderDashboard();
     showToast('Budgets saved', 'success');
-    if (getApiUrl()) apiCall('saveBudgets', { budgets });
+    if (getApiUrl()) {
+        // Sync "all" budgets to the budgets sheet (backward compat)
+        apiCall('saveBudgets', { budgets: store.budgets.all || {} });
+        // Sync full per-account structure via settings
+        apiCall('saveSettings', { settings: buildSettingsPayload() });
+    }
 }
 
 // ===================== SETTINGS MODAL =====================
@@ -5192,7 +5244,7 @@ function renderDailyAllowance(txs, totalSpent, totalIncome) {
     // Calculate spending within current cycle
     let cycleSpent = 0;
     let cycleBudgetTotal = 0;
-    const budgets = store.budgets || {};
+    const budgets = getActiveBudgets();
 
     // Get total monthly budget (sum of all budgets)
     for (const [cat, amount] of Object.entries(budgets)) {
@@ -5290,7 +5342,7 @@ function renderFinancialHealthScore(txs, debits, credits, totalSpent, totalIncom
     const savingsPoints = Math.round(savingsRate * 30);
 
     // 2. Budget adherence (up to 25 points)
-    const budgets = store.budgets || {};
+    const budgets = getActiveBudgets();
     const budgetCats = Object.keys(budgets);
     let budgetedCount = 0;
     let withinBudget = 0;
