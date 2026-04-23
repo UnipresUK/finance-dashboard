@@ -82,6 +82,7 @@ function route(p) {
       case 'deleteTransactions':  return doDeleteTransactions(p);
       case 'saveBudgets':         return doSaveBudgets(p);
       case 'saveSettings':        return doSaveSettings(p);
+      case 'saveSavings':         return doSaveSavings(p);
       case 'saveCustomCategory':  return doSaveCustomCategory(p);
       case 'deleteCustomCategory':return doDeleteCustomCategory(p);
       default:                    return fail('Unknown action: ' + p.action);
@@ -107,6 +108,19 @@ function doSync() {
       settings[row.key] = row.value;
     }
   });
+
+  // Also read from dedicated Savings sheet (overrides Settings values if present)
+  try {
+    const savingsSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('Savings');
+    if (savingsSheet) {
+      const savingsRows = sheetToObjects(savingsSheet);
+      savingsRows.forEach(row => {
+        if (!row.key) return;
+        try { settings[row.key] = JSON.parse(row.value); }
+        catch (_) { settings[row.key] = row.value; }
+      });
+    }
+  } catch(_) {}
 
   return ok({
     transactions: transactions,
@@ -307,6 +321,45 @@ function doSaveCustomCategory(p) {
     sheet.appendRow([uid(), p.name, p.color || '#e84393', p.keywords || '']);
   }
   return ok({ created: true });
+}
+
+// ─── Save Savings Data to Savings sheet ─────────────────────────
+function doSaveSavings(p) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName('Savings');
+  if (!sheet) sheet = ss.insertSheet('Savings');
+
+  // Ensure key/value headers exist
+  const existing = sheet.getDataRange().getValues();
+  const headers = existing[0] || [];
+  let keyCol = findCol(headers, 'key');
+  let valCol = findCol(headers, 'value');
+
+  if (keyCol < 0 || valCol < 0) {
+    sheet.clearContents();
+    sheet.getRange(1, 1, 1, 2).setValues([['key', 'value']]);
+    keyCol = 0;
+    valCol = 1;
+  }
+
+  // Re-read data after potential header setup
+  const data = sheet.getDataRange().getValues();
+  const rowMap = {};
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][keyCol]) rowMap[data[i][keyCol]] = i + 1;
+  }
+
+  const savings = p.savings || {};
+  for (const [key, value] of Object.entries(savings)) {
+    const valStr = typeof value === 'string' ? value : JSON.stringify(value);
+    if (rowMap[key]) {
+      sheet.getRange(rowMap[key], valCol + 1).setValue(valStr);
+    } else {
+      sheet.appendRow([key, valStr]);
+    }
+  }
+
+  return ok({ saved: Object.keys(savings).length });
 }
 
 // ─── Delete Custom Category ─────────────────────────────────────

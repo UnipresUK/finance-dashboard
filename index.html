@@ -5910,7 +5910,7 @@ function savePot() {
         store.settings.savingsForecast.push({ id: Date.now().toString(), name, currentBalance: bal, monthlyContribution: contrib, expenses: [] });
     }
     saveStore();
-    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    saveSavingsToSheet();
     closePotModal();
     renderSavingsForecast();
 }
@@ -5919,7 +5919,7 @@ function deletePot(potId) {
     if (!confirm('Delete this savings pot?')) return;
     store.settings.savingsForecast = (store.settings.savingsForecast || []).filter(p => p.id !== potId);
     saveStore();
-    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    saveSavingsToSheet();
     renderSavingsForecast();
 }
 
@@ -5991,7 +5991,7 @@ function saveExpense() {
 
     pot.expenses.sort((a,b) => a.month.localeCompare(b.month));
     saveStore();
-    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    saveSavingsToSheet();
     closeExpenseModal();
     autoImportForecastExpenses(); // import any past instalments immediately
     renderSavingsForecast();
@@ -6009,7 +6009,7 @@ function deleteExpense(potId, expId) {
         pot.expenses = pot.expenses.filter(e => e.id !== expId);
     }
     saveStore();
-    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    saveSavingsToSheet();
     renderSavingsForecast();
 }
 
@@ -6056,7 +6056,7 @@ function saveSavingsTx() {
     });
     store.settings.manualSavingsTx.sort((a,b) => b.date.localeCompare(a.date));
     saveStore();
-    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    saveSavingsToSheet();
     closeSavingsTxModal();
     renderSavingsTxHistory();
 }
@@ -6064,7 +6064,7 @@ function saveSavingsTx() {
 function deleteManualSavingsTx(id) {
     store.settings.manualSavingsTx = (store.settings.manualSavingsTx || []).filter(t => t.id !== id);
     saveStore();
-    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    saveSavingsToSheet();
     renderSavingsTxHistory();
 }
 
@@ -6159,8 +6159,18 @@ function autoImportForecastExpenses() {
     if (added > 0) {
         store.settings.manualSavingsTx.sort((a,b) => b.date.localeCompare(a.date));
         saveStore();
-        if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+        saveSavingsToSheet();
     }
+}
+
+function saveSavingsToSheet() {
+    if (!getApiUrl()) return;
+    apiCall('saveSavings', {
+        savings: {
+            savingsForecast: store.settings.savingsForecast || [],
+            manualSavingsTx: store.settings.manualSavingsTx || []
+        }
+    });
 }
 
 async function forceSyncSavings() {
@@ -6168,12 +6178,15 @@ async function forceSyncSavings() {
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Syncing...'; }
     try {
         if (!getApiUrl()) { showToast('No API URL configured', 'error'); return; }
-        // First pull from sheet to merge any data already there
-        await syncFromSheet();
-        // Then push everything local (including savings pots, expenses, transactions)
-        const result = await apiCall('saveSettings', { settings: buildSettingsPayload() });
+        // Push local savings data directly to Savings sheet
+        const result = await apiCall('saveSavings', {
+            savings: {
+                savingsForecast: store.settings.savingsForecast || [],
+                manualSavingsTx: store.settings.manualSavingsTx || []
+            }
+        });
         if (result !== null) {
-            showToast('✓ Savings data pushed to Google Sheets', 'success');
+            showToast('✓ Savings data pushed to Google Sheets (Savings tab)', 'success');
             renderSavingsForecast();
             renderSavingsTxHistory();
         } else {
