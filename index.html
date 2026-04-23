@@ -1535,11 +1535,7 @@
     <div id="savingsForecastSection" style="display:none;padding:24px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:8px">
             <h2 style="margin:0;font-size:1.2rem;color:var(--text)">Savings Forecast</h2>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                <button class="btn btn-outline" onclick="diagnoseSavings()" style="font-size:0.8rem;padding:6px 12px">🔍 Check Data</button>
-                <button class="btn btn-outline" onclick="forceSyncSavings()" id="forceSyncBtn" style="font-size:0.8rem;padding:6px 12px">☁️ Push to Sheet</button>
                 <button class="btn btn-primary" onclick="openAddPotModal()">+ Add Savings Pot</button>
-            </div>
         </div>
         <div id="savingsPotsContainer"></div>
         <div id="savingsForecastTable" style="margin-top:24px;overflow-x:auto"></div>
@@ -2061,9 +2057,9 @@ function unlockApp() {
             if (result === false) {
                 showConnectionError();
             } else {
-                // Push local settings to sheet so any locally-added savings/budget data
-                // that wasn't yet synced (e.g. entered offline) gets written up
+                // Push local settings + savings to sheet so any offline-entered data flows up
                 try { await apiCall('saveSettings', { settings: buildSettingsPayload() }); } catch(e) {}
+                try { saveSavingsToSheet(); } catch(e) {}
                 showToast('Connected & synced ✓', 'success');
                 // Always re-render after sync since syncFromSheet's internal render may have failed silently
                 try { renderDashboard(); } catch(e) { console.error('[UNLOCK] Post-sync render:', e); }
@@ -6173,99 +6169,6 @@ function saveSavingsToSheet() {
     });
 }
 
-async function forceSyncSavings() {
-    const btn = document.getElementById('forceSyncBtn');
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Syncing...'; }
-    try {
-        if (!getApiUrl()) { showToast('No API URL configured', 'error'); return; }
-        // Push local savings data directly to Savings sheet
-        const result = await apiCall('saveSavings', {
-            savings: {
-                savingsForecast: store.settings.savingsForecast || [],
-                manualSavingsTx: store.settings.manualSavingsTx || []
-            }
-        });
-        if (result !== null) {
-            showToast('✓ Savings data pushed to Google Sheets (Savings tab)', 'success');
-            renderSavingsForecast();
-            renderSavingsTxHistory();
-        } else {
-            showToast('Push failed — check your connection', 'error');
-        }
-    } finally {
-        if (btn) { btn.disabled = false; btn.textContent = '☁️ Push to Sheet'; }
-    }
-}
-
-async function diagnoseSavings() {
-    const localPots = (store.settings.savingsForecast || []);
-    const localTx = (store.settings.manualSavingsTx || []);
-    const url = getApiUrl();
-
-    // Step 1: show local state
-    let msg = `📱 LOCAL (this browser):\n`;
-    msg += `  Savings pots: ${localPots.length}`;
-    if (localPots.length > 0) msg += ` → ${localPots.map(p=>p.name).join(', ')}`;
-    msg += `\n  Manual transactions: ${localTx.length}`;
-    msg += `\n  API URL: ${url ? url.substring(0,60)+'...' : 'NOT SET'}`;
-    alert(msg);
-
-    if (!url) { alert('No API URL configured — go to Settings and set the Google Sheets URL.'); return; }
-
-    // Step 2: test write to sheet
-    alert('Now testing write to Google Sheet...');
-    try {
-        const testResp = await fetch(url, {
-            method: 'POST', redirect: 'follow',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ action: 'saveSettings', settings: { _diagTest: 'ok_' + Date.now() } })
-        });
-        const testText = await testResp.text();
-        let testData;
-        try { testData = JSON.parse(testText); } catch(e) { alert('❌ Sheet write returned invalid JSON:\n' + testText.substring(0,400)); return; }
-        if (!testData.ok) { alert('❌ Sheet write FAILED:\n' + testData.error + '\n\nThis explains why your savings data was never saved. Check that:\n1. The Settings sheet exists in Google Sheets\n2. It has columns named "key" and "value"\n3. The Apps Script is deployed with "Anyone" access'); return; }
-        alert('✅ Sheet write works!\n\nNow reading savings data from sheet...');
-    } catch(e) {
-        alert('❌ Could not reach Google Sheet:\n' + e.message + '\n\nCheck your internet connection and the API URL in Settings.');
-        return;
-    }
-
-    // Step 3: read savings from sheet
-    try {
-        const resp = await fetch(url + '?action=sync', { method: 'GET', redirect: 'follow' });
-        const text = await resp.text();
-        let data;
-        try { data = JSON.parse(text); } catch(e) { alert('Sheet returned invalid response:\n' + text.substring(0,300)); return; }
-        if (!data.ok) { alert('Sync error: ' + data.error); return; }
-
-        const ss = data.data?.settings || {};
-        const sheetForecast = ss.savingsForecast;
-        const sheetTx = ss.manualSavingsTx;
-        const parsedForecast = typeof sheetForecast === 'string' ? JSON.parse(sheetForecast || '[]') : (sheetForecast || []);
-        const parsedTx = typeof sheetTx === 'string' ? JSON.parse(sheetTx || '[]') : (sheetTx || []);
-
-        let sheetMsg = `☁️ GOOGLE SHEET savings data:\n  Pots: ${parsedForecast.length}`;
-        if (parsedForecast.length > 0) sheetMsg += ` → ${parsedForecast.map(p=>p.name).join(', ')}`;
-        sheetMsg += `\n  Manual transactions: ${parsedTx.length}`;
-        if (parsedForecast.length === 0 && localPots.length === 0) {
-            sheetMsg += '\n\n⚠️ No savings data anywhere.\nIf you entered pots on another device, go to that browser and press "☁️ Push to Sheet".';
-        } else if (parsedForecast.length === 0 && localPots.length > 0) {
-            sheetMsg += '\n\n✅ You have local pots — click OK then press "☁️ Push to Sheet" to save them.';
-        }
-        alert(sheetMsg);
-
-        if (parsedForecast.length > 0) {
-            store.settings.savingsForecast = parsedForecast;
-            if (parsedTx.length > 0) store.settings.manualSavingsTx = parsedTx;
-            saveStore();
-            renderSavingsForecast();
-            renderSavingsTxHistory();
-            showToast('Loaded ' + parsedForecast.length + ' pots from sheet ✓', 'success');
-        }
-    } catch(e) {
-        alert('Error reading sheet:\n' + e.message);
-    }
-}
 
 function renderSavingsForecast() {
     const pots = store.settings.savingsForecast || [];
