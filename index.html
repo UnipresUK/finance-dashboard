@@ -5839,7 +5839,7 @@ function dismissRecurringFlag(name, flag) {
 const PS_PIN_KEY = 'payslipPinHash';
 const PS_PIN_SALT = 'payslipPinSalt';
 const PS_MONTHS = ['April','May','June','July','August','September','October','November','December','January','February','March'];
-let psUnlocked = false, psPinEntry = '', psPinMode = 'unlock', psPinSetup = '', psCurrentPeriod = 1;
+let psUnlocked = false, psPinEntry = '', psPinMode = 'unlock', psPinSetup = '', psCurrentPeriod = 1, psSimPeriod = 1;
 
 const PS_RATES = {
     '2025-26': { bw: 37700, hw: 74870, br: 0.20, hr: 0.40, ar: 0.45, niPT: 12570, niUEL: 50270, ni1: 0.08, ni2: 0.02, niEmpRate: 0.138, niEmpST: 9100, hicbcLo: 60000, hicbcHi: 80000, cbE: 25.60, cbO: 16.95 },
@@ -6055,6 +6055,8 @@ function renderPsPayslip() {
 }
 
 // --- Pension Simulator ---
+function setSimPeriod(p) { psSimPeriod = p; renderPsSimulator(); }
+
 function renderPsSimulator() {
     const config = getPsConfig();
     const slider = document.getElementById('psSimSlider');
@@ -6063,67 +6065,164 @@ function renderPsSimulator() {
     document.getElementById('psSimPctLabel').textContent = simPct + '%';
 
     const current = psCalcYear(config, config.pensionPct);
-    const sim = psCalcYear(config, simPct);
-    const months = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+    const sim     = psCalcYear(config, simPct);
+    const taxYearStart = parseInt(config.taxYear.split('-')[0]);
+    const fd = config.fd || {};
 
-    const fmt = v => (v >= 0 ? '+' : '') + '£' + Math.abs(v).toFixed(2);
-    const fmtA = v => (v >= 0 ? '+' : '') + '£' + Math.abs(v).toFixed(0);
-    const annC = (fn) => current.reduce((s,x)=>s+fn(x),0);
-    const annS = (fn) => sim.reduce((s,x)=>s+fn(x),0);
+    const c = current[psSimPeriod - 1];
+    const s = sim[psSimPeriod - 1];
 
-    const dNetAnn = annS(x=>x.netPay) - annC(x=>x.netPay);
-    const dTaxAnn = annS(x=>x.tax) - annC(x=>x.tax);
-    const dNIAnn = annS(x=>x.ni) - annC(x=>x.ni);
+    const annC = fn => current.reduce((a,x)=>a+fn(x),0);
+    const annS = fn => sim.reduce((a,x)=>a+fn(x),0);
+    const dNetAnn  = annS(x=>x.netPay)   - annC(x=>x.netPay);
+    const dTaxAnn  = annS(x=>x.tax)      - annC(x=>x.tax);
+    const dNIAnn   = annS(x=>x.ni)       - annC(x=>x.ni);
     const dPensAnn = annS(x=>x.mPension) - annC(x=>x.mPension);
 
+    // Inline delta badge — green/red, shows — when negligible
+    const delta = (v, goodWhenPos) => {
+        if (Math.abs(v) < 0.005) return '<span style="color:var(--text-dim)">—</span>';
+        const good = (v > 0) === goodWhenPos;
+        return `<span style="color:${good?'var(--green)':'var(--red)'};font-size:0.78rem">${v>0?'+':'−'}£${Math.abs(v).toFixed(2)}</span>`;
+    };
+    const deltaAnn = (v, goodWhenPos) => {
+        if (Math.abs(v) < 0.5) return '<span style="color:var(--text-dim)">—</span>';
+        const good = (v > 0) === goodWhenPos;
+        return `<span style="color:${good?'var(--green)':'var(--red)'}">${v>0?'+':'−'}£${Math.abs(v).toFixed(0)}</span>`;
+    };
+
+    // Payslip row: label | current value | sim value | change
+    const psRow = (label, cVal, sVal, goodWhenPos, negate) => {
+        const dv = (sVal - cVal) * (negate ? -1 : 1);
+        const prefix = negate ? '−' : '';
+        return `<div class="ps-row">
+            <span class="ps-label" style="flex:2.2">${label}</span>
+            <span style="flex:1;text-align:right">${prefix}£${cVal.toFixed(2)}</span>
+            <span style="flex:1;text-align:right;font-weight:${simPct===config.pensionPct?'400':'600'}">${prefix}£${sVal.toFixed(2)}</span>
+            <span style="flex:1;text-align:right">${delta(dv, goodWhenPos)}</span>
+        </div>`;
+    };
+    const psRowBold = (label, cVal, sVal, goodWhenPos) => {
+        const dv = sVal - cVal;
+        return `<div class="ps-row" style="font-weight:700;margin-top:4px">
+            <span style="flex:2.2">${label}</span>
+            <span style="flex:1;text-align:right">£${cVal.toFixed(2)}</span>
+            <span style="flex:1;text-align:right">£${sVal.toFixed(2)}</span>
+            <span style="flex:1;text-align:right">${delta(dv, goodWhenPos)}</span>
+        </div>`;
+    };
+
+    // Period selector
+    const periodSel = PS_MONTHS.map((m, i) => {
+        const yr = i < 9 ? taxYearStart : taxYearStart + 1;
+        return `<button onclick="setSimPeriod(${i+1})" style="padding:4px 10px;border-radius:12px;border:1px solid var(--border);cursor:pointer;font-size:0.75rem;
+            background:${i+1===psSimPeriod?'var(--accent)':'var(--card)'};color:${i+1===psSimPeriod?'#fff':'var(--text)'}">${m.slice(0,3)}'${String(yr).slice(2)}</button>`;
+    }).join('');
+
     document.getElementById('psSimResults').innerHTML = `
+    <!-- Annual summary chips -->
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:20px">
-        ${[
-            ['Net Pay/yr', dNetAnn, dNetAnn>=0],
-            ['Tax/yr', dTaxAnn, dTaxAnn<=0],
-            ['NI/yr', dNIAnn, dNIAnn<=0],
-            ['Pension/yr', dPensAnn, dPensAnn>=0]
-        ].map(([l,v,good])=>`<div class="ps-section" style="margin:0;border-color:${good?'var(--green)':'var(--red)'}">
-            <div class="ps-section-title">${l}</div>
-            <div style="font-size:1rem;font-weight:700;color:${good?'var(--green)':'var(--red)'}">${fmtA(v)}</div>
-        </div>`).join('')}
+        ${[['Net Pay/yr',dNetAnn,true],['Tax/yr',dTaxAnn,false],['NI/yr',dNIAnn,false],['Pension/yr',dPensAnn,true]]
+          .map(([l,v,gp])=>{
+            const neutral = Math.abs(v)<0.5;
+            const good = !neutral && (v>0)===gp;
+            return `<div class="ps-section" style="margin:0;border-color:${neutral?'var(--border)':good?'var(--green)':'var(--red)'}">
+                <div class="ps-section-title">${l}</div>
+                <div style="font-size:1rem;font-weight:700;color:${neutral?'var(--text-dim)':good?'var(--green)':'var(--red)'}">
+                    ${neutral?'No change':(v>0?'+':'−')+'£'+Math.abs(v).toFixed(0)}</div>
+            </div>`;}).join('')}
     </div>
+
+    <!-- Period selector -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${periodSel}</div>
+
+    <!-- Column headers -->
+    <div style="max-width:720px">
+    <div style="display:flex;padding:0 0 6px;font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-dim);border-bottom:1px solid var(--border);margin-bottom:4px">
+        <span style="flex:2.2"></span>
+        <span style="flex:1;text-align:right">Current&nbsp;(${config.pensionPct}%)</span>
+        <span style="flex:1;text-align:right">Simulated&nbsp;(${simPct}%)</span>
+        <span style="flex:1;text-align:right">Change</span>
+    </div>
+
+    <!-- PAYMENTS -->
+    <div class="ps-section">
+        <div class="ps-section-title">Payments</div>
+        ${psRow('Salary Sacrifice Pension', c.mPension, s.mPension, false, true)}
+        ${psRow('Basic', c.mBasic, s.mBasic, true, false)}
+        ${psRow('Car Allowance', c.mCar, s.mCar, true, false)}
+        ${(c.bonus>0||s.bonus>0)?psRow('Bonus', c.bonus, s.bonus, true, false):''}
+        ${psRowBold('Gross Pay', c.gross, s.gross, true)}
+    </div>
+
+    <!-- DEDUCTIONS -->
+    <div class="ps-section">
+        <div class="ps-section-title">Deductions</div>
+        ${psRow('Tax', c.tax, s.tax, false, false)}
+        ${psRow('NI – A', c.ni, s.ni, false, false)}
+        ${fd.ss         ? psRow('Sports &amp; Social', fd.ss, fd.ss, true, false) : ''}
+        ${fd.cashDraw   ? psRow('Cash Draw', fd.cashDraw, fd.cashDraw, true, false) : ''}
+        ${fd.privateHealth ? psRow('Private Health', fd.privateHealth, fd.privateHealth, true, false) : ''}
+        ${fd.ssCashDraw ? psRow('S&amp;S Cash Draw', fd.ssCashDraw, fd.ssCashDraw, true, false) : ''}
+        ${psRowBold('Total Deductions', c.totalDed, s.totalDed, false)}
+    </div>
+
+    <!-- YTD side by side -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div class="ps-section" style="margin:0">
+            <div class="ps-section-title">YTD — Current (${config.pensionPct}%)</div>
+            <div class="ps-row"><span class="ps-label">Tax Paid</span><span>£${c.ytdT.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">NI Paid</span><span>£${c.ytdNI.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">Taxable Pay YTD</span><span>£${c.ytdG.toFixed(2)}</span></div>
+        </div>
+        <div class="ps-section" style="margin:0">
+            <div class="ps-section-title">YTD — Simulated (${simPct}%)</div>
+            <div class="ps-row"><span class="ps-label">Tax Paid</span><span>£${s.ytdT.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">NI Paid</span><span>£${s.ytdNI.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">Taxable Pay YTD</span><span>£${s.ytdG.toFixed(2)}</span></div>
+        </div>
+    </div>
+
+    <!-- Net pay banners -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px">
+        <div class="ps-net" style="opacity:0.65">
+            <span style="color:#fff;font-size:0.85rem;font-weight:700">Current — ${c.month}</span>
+            <span style="color:#fff;font-size:1.3rem;font-weight:700">£${c.netPay.toFixed(2)}</span>
+        </div>
+        <div class="ps-net">
+            <div>
+                <div style="color:#fff;font-size:0.85rem;font-weight:700">Simulated — ${s.month}</div>
+                <div style="color:rgba(255,255,255,0.8);font-size:0.72rem;margin-top:2px">
+                    ${Math.abs(s.netPay-c.netPay)<0.005?'No change':(s.netPay-c.netPay>0?'+':'−')+'£'+Math.abs(s.netPay-c.netPay).toFixed(2)+' vs current'}
+                </div>
+            </div>
+            <span style="color:#fff;font-size:1.3rem;font-weight:700">£${s.netPay.toFixed(2)}</span>
+        </div>
+    </div>
+
+    <!-- Full year comparison table -->
+    <div style="font-size:0.72rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px">Full Year Comparison (${config.taxYear})</div>
     <div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;font-size:0.8rem;min-width:500px">
-        <thead>
-            <tr style="border-bottom:2px solid var(--border)">
-                <th style="text-align:left;padding:6px 8px">Month</th>
-                <th style="text-align:right;padding:6px 8px">Current Net</th>
-                <th style="text-align:right;padding:6px 8px">Sim Net (${simPct}%)</th>
-                <th style="text-align:right;padding:6px 8px">Δ Net</th>
-                <th style="text-align:right;padding:6px 8px">Sim Tax</th>
-                <th style="text-align:right;padding:6px 8px">Sim NI</th>
-                <th style="text-align:right;padding:6px 8px">Sim Pension</th>
-            </tr>
-        </thead>
+    <table style="width:100%;border-collapse:collapse;font-size:0.81rem;min-width:420px">
+        <thead><tr style="border-bottom:2px solid var(--border)">
+            <th style="text-align:left;padding:6px 8px"></th>
+            <th style="text-align:right;padding:6px 8px">Current (${config.pensionPct}%)</th>
+            <th style="text-align:right;padding:6px 8px">Simulated (${simPct}%)</th>
+            <th style="text-align:right;padding:6px 8px">Annual Change</th>
+        </tr></thead>
         <tbody>
-            ${current.map((c,i)=>{const s=sim[i];const dn=s.netPay-c.netPay;return`<tr style="border-bottom:1px solid var(--border)">
-                <td style="padding:5px 8px">${months[i]}</td>
-                <td style="padding:5px 8px;text-align:right">£${c.netPay.toFixed(2)}</td>
-                <td style="padding:5px 8px;text-align:right;font-weight:600">£${s.netPay.toFixed(2)}</td>
-                <td style="padding:5px 8px;text-align:right;color:${dn>=0?'var(--green)':'var(--red)'}">${fmt(dn)}</td>
-                <td style="padding:5px 8px;text-align:right">£${s.tax.toFixed(2)}</td>
-                <td style="padding:5px 8px;text-align:right">£${s.ni.toFixed(2)}</td>
-                <td style="padding:5px 8px;text-align:right">£${s.mPension.toFixed(2)}</td>
-            </tr>`}).join('')}
+            ${[['Gross Pay',x=>x.gross,true],['Tax',x=>x.tax,false],['NI',x=>x.ni,false],
+               ['Pension (employee)',x=>x.mPension,true],['Net Pay',x=>x.netPay,true]]
+              .map(([l,fn,gp])=>{const cv=annC(fn),sv=annS(fn),dv=sv-cv;
+                return `<tr style="border-bottom:1px solid var(--border)">
+                    <td style="padding:5px 8px">${l}</td>
+                    <td style="padding:5px 8px;text-align:right">£${cv.toFixed(0)}</td>
+                    <td style="padding:5px 8px;text-align:right;font-weight:600">£${sv.toFixed(0)}</td>
+                    <td style="padding:5px 8px;text-align:right">${deltaAnn(dv,gp)}</td>
+                </tr>`;}).join('')}
         </tbody>
-        <tfoot>
-            <tr style="font-weight:700;border-top:2px solid var(--border)">
-                <td style="padding:6px 8px">Annual</td>
-                <td style="padding:6px 8px;text-align:right">£${annC(x=>x.netPay).toFixed(0)}</td>
-                <td style="padding:6px 8px;text-align:right">£${annS(x=>x.netPay).toFixed(0)}</td>
-                <td style="padding:6px 8px;text-align:right;color:${dNetAnn>=0?'var(--green)':'var(--red)'}">${fmtA(dNetAnn)}</td>
-                <td style="padding:6px 8px;text-align:right">£${annS(x=>x.tax).toFixed(0)}</td>
-                <td style="padding:6px 8px;text-align:right">£${annS(x=>x.ni).toFixed(0)}</td>
-                <td style="padding:6px 8px;text-align:right">£${annS(x=>x.mPension).toFixed(0)}</td>
-            </tr>
-        </tfoot>
-    </table></div>`;
+    </table></div>
+    </div>`;
 }
 
 // --- Child Benefit ---
