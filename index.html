@@ -1216,6 +1216,17 @@
         .dash-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
         .dash-tab:hover:not(.active) { color:var(--text); }
 
+        /* Payslip sub-tabs */
+        .ps-tab { background:var(--card); border:1px solid var(--border); color:var(--text-dim); padding:6px 14px; cursor:pointer; font-size:0.82rem; border-radius:20px; transition:all 0.15s; }
+        .ps-tab.active { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; }
+        .ps-tab:hover:not(.active) { color:var(--text); border-color:var(--text-dim); }
+        .ps-row { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--border); font-size:0.83rem; }
+        .ps-row:last-child { border-bottom:none; }
+        .ps-label { color:var(--text-dim); }
+        .ps-section { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px; }
+        .ps-section-title { font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-dim); margin-bottom:10px; }
+        .ps-net { background:var(--accent); border-radius:10px; padding:16px 20px; display:flex; justify-content:space-between; align-items:center; }
+
         /* Modal box (used by savings forecast modals) */
         .modal-box {
             background: var(--surface);
@@ -1379,6 +1390,7 @@
     <div class="dash-tabs" id="dashTabs">
         <button class="dash-tab active" onclick="switchDashTab('overview')" id="tabOverview">Overview</button>
         <button class="dash-tab" onclick="switchDashTab('forecast')" id="tabForecast">💰 Savings Forecast</button>
+        <button class="dash-tab" onclick="switchDashTab('payslip')" id="tabPayslip">💷 Payslip</button>
     </div>
 
     <!-- Dashboard content -->
@@ -1689,6 +1701,116 @@
             <button class="btn btn-primary" onclick="assignUpload('person1')" id="btnAssign1">Person 1</button>
             <button class="btn btn-primary" onclick="assignUpload('person2')" id="btnAssign2">Person 2</button>
             <button class="btn btn-primary" onclick="assignUpload('joint')" id="btnAssignJ">Joint</button>
+        </div>
+    </div>
+</div>
+
+<!-- ===================== PAYSLIP SECTION ===================== -->
+<div id="payslipSection" style="display:none">
+    <!-- Lock Screen -->
+    <div id="payslipLockScreen" style="display:flex;align-items:center;justify-content:center;min-height:65vh">
+        <div style="text-align:center;max-width:320px;width:100%;padding:24px">
+            <div style="font-size:2.5rem;margin-bottom:8px">💷</div>
+            <h2 id="payslipLockTitle" style="margin:0 0 6px">Payslip PIN</h2>
+            <p id="payslipLockSub" style="font-size:0.82rem;color:var(--text-dim);margin:0 0 20px">Enter your payslip PIN to continue</p>
+            <div style="display:flex;gap:12px;justify-content:center;margin-bottom:20px">
+                <div class="pin-dot" id="psDot0"></div><div class="pin-dot" id="psDot1"></div>
+                <div class="pin-dot" id="psDot2"></div><div class="pin-dot" id="psDot3"></div>
+            </div>
+            <div class="pin-grid">
+                <button class="pin-btn" onclick="psPin(1)">1</button><button class="pin-btn" onclick="psPin(2)">2</button><button class="pin-btn" onclick="psPin(3)">3</button>
+                <button class="pin-btn" onclick="psPin(4)">4</button><button class="pin-btn" onclick="psPin(5)">5</button><button class="pin-btn" onclick="psPin(6)">6</button>
+                <button class="pin-btn" onclick="psPin(7)">7</button><button class="pin-btn" onclick="psPin(8)">8</button><button class="pin-btn" onclick="psPin(9)">9</button>
+                <button class="pin-btn" onclick="psPinClear()">Clear</button><button class="pin-btn" onclick="psPin(0)">0</button><button class="pin-btn" onclick="psPinDel()">⌫</button>
+            </div>
+            <p id="payslipPinErr" style="color:var(--red);font-size:0.8rem;margin-top:10px;min-height:18px"></p>
+        </div>
+    </div>
+
+    <!-- Payslip Content (shown after unlock) -->
+    <div id="payslipContent" style="display:none;padding:20px">
+        <!-- Sub-tab bar -->
+        <div style="display:flex;gap:6px;margin-bottom:20px;align-items:center;flex-wrap:wrap">
+            <button onclick="switchPsTab('payslip')" id="psTab_payslip" class="ps-tab active">📄 Payslip</button>
+            <button onclick="switchPsTab('simulator')" id="psTab_simulator" class="ps-tab">⚙️ Pension Sim</button>
+            <button onclick="switchPsTab('childbenefit')" id="psTab_childbenefit" class="ps-tab">👶 Child Benefit</button>
+            <button onclick="switchPsTab('history')" id="psTab_history" class="ps-tab">📅 History</button>
+            <div style="margin-left:auto;display:flex;gap:8px">
+                <button onclick="openPayslipConfig()" class="btn btn-outline btn-small" style="font-size:0.75rem">⚙️ Configure</button>
+                <button onclick="lockPayslip()" class="btn btn-outline btn-small" style="font-size:0.75rem">🔒 Lock</button>
+            </div>
+        </div>
+
+        <!-- Payslip Tab -->
+        <div id="pane_payslip">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px" id="psPeriodSelector"></div>
+            <div id="psPayslipCard"></div>
+        </div>
+
+        <!-- Simulator Tab -->
+        <div id="pane_simulator" style="display:none">
+            <div style="max-width:600px">
+                <h3 style="margin:0 0 4px;font-size:1rem">Pension % Simulator</h3>
+                <p style="color:var(--text-dim);font-size:0.82rem;margin:0 0 16px">Drag to see the impact on your monthly take-home, tax and NI.</p>
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+                    <label style="font-size:0.85rem;white-space:nowrap">Pension %</label>
+                    <input type="range" id="psSimSlider" min="0" max="60" step="1" oninput="renderPsSimulator()" style="flex:1">
+                    <span id="psSimPctLabel" style="font-weight:700;min-width:36px;text-align:right"></span>
+                </div>
+                <div id="psSimResults"></div>
+            </div>
+        </div>
+
+        <!-- Child Benefit Tab -->
+        <div id="pane_childbenefit" style="display:none">
+            <div style="max-width:560px" id="psCBContent"></div>
+        </div>
+
+        <!-- History Tab -->
+        <div id="pane_history" style="display:none">
+            <div id="psHistoryContent"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Payslip Config Modal -->
+<div class="modal-overlay" id="payslipConfigModal" onclick="if(event.target===this)closePayslipConfig()" style="display:none">
+    <div class="modal" style="max-width:500px">
+        <button class="modal-close" onclick="closePayslipConfig()">&times;</button>
+        <h2>Payslip Configuration</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group"><label>Tax Year</label>
+                <select id="psCfgTaxYear"><option value="2025-26">2025–26</option><option value="2024-25">2024–25</option><option value="2023-24">2023–24</option></select></div>
+            <div class="form-group"><label>Tax Code Number</label>
+                <input type="number" id="psCfgTaxCode" placeholder="e.g. 1257"></div>
+            <div class="form-group"><label>Annual Basic Salary</label>
+                <input type="number" id="psCfgBasic" placeholder="e.g. 68900"></div>
+            <div class="form-group"><label>Car Allowance (annual)</label>
+                <input type="number" id="psCfgCar" placeholder="e.g. 8568"></div>
+            <div class="form-group"><label>Bonus Amount</label>
+                <input type="number" id="psCfgBonus" placeholder="e.g. 10000"></div>
+            <div class="form-group"><label>Bonus Period (1=Apr, 0=none)</label>
+                <input type="number" id="psCfgBonusPeriod" min="0" max="12" placeholder="0"></div>
+            <div class="form-group"><label>Employee Pension % (salary sacrifice)</label>
+                <input type="number" id="psCfgPension" step="0.5" placeholder="e.g. 18"></div>
+            <div class="form-group"><label>Employer Pension %</label>
+                <input type="number" id="psCfgEmpPension" step="0.5" placeholder="e.g. 22.5"></div>
+        </div>
+        <p style="font-size:0.8rem;font-weight:600;margin:12px 0 8px">Fixed Monthly Deductions</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group"><label>Sports &amp; Social</label><input type="number" id="psCfgSS" step="0.01" placeholder="1.00"></div>
+            <div class="form-group"><label>Cash Draw</label><input type="number" id="psCfgCD" step="0.01" placeholder="15.00"></div>
+            <div class="form-group"><label>Private Health</label><input type="number" id="psCfgPH" step="0.01" placeholder="25.00"></div>
+            <div class="form-group"><label>S&amp;S Cash Draw</label><input type="number" id="psCfgSSCD" step="0.01" placeholder="10.00"></div>
+        </div>
+        <p style="font-size:0.8rem;font-weight:600;margin:12px 0 8px">Child Benefit</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group"><label>Number of Children</label><input type="number" id="psCfgChildren" min="0" max="10" placeholder="1"></div>
+            <div class="form-group"><label>Annual CB Received (£)</label><input type="number" id="psCfgCBAmount" step="0.01" placeholder="2078.40"></div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+            <button class="btn btn-outline" onclick="closePayslipConfig()">Cancel</button>
+            <button class="btn btn-primary" onclick="savePayslipConfig()">Save</button>
         </div>
     </div>
 </div>
@@ -5713,6 +5835,421 @@ function dismissRecurringFlag(name, flag) {
 }
 
 
+// ===================== PAYSLIP TAB =====================
+const PS_PIN_KEY = 'payslipPinHash';
+const PS_PIN_SALT = 'payslipPinSalt';
+const PS_MONTHS = ['April','May','June','July','August','September','October','November','December','January','February','March'];
+let psUnlocked = false, psPinEntry = '', psPinMode = 'unlock', psPinSetup = '', psCurrentPeriod = 1;
+
+const PS_RATES = {
+    '2025-26': { bw: 37700, hw: 74870, br: 0.20, hr: 0.40, ar: 0.45, niPT: 12570, niUEL: 50270, ni1: 0.08, ni2: 0.02, niEmpRate: 0.138, niEmpST: 9100, hicbcLo: 60000, hicbcHi: 80000, cbE: 25.60, cbO: 16.95 },
+    '2024-25': { bw: 37700, hw: 74870, br: 0.20, hr: 0.40, ar: 0.45, niPT: 12570, niUEL: 50270, ni1: 0.08, ni2: 0.02, niEmpRate: 0.138, niEmpST: 9100, hicbcLo: 60000, hicbcHi: 80000, cbE: 25.60, cbO: 16.95 },
+    '2023-24': { bw: 37700, hw: 74870, br: 0.20, hr: 0.40, ar: 0.45, niPT: 12570, niUEL: 50270, ni1: 0.10, ni2: 0.02, niEmpRate: 0.138, niEmpST: 9100, hicbcLo: 50000, hicbcHi: 60000, cbE: 24.00, cbO: 15.90 }
+};
+
+function defaultPsConfig() {
+    return { taxYear:'2025-26', annualBasic:68900, carAllowance:8568, bonus:10000, bonusPeriod:0,
+             pensionPct:18, taxCodeNum:1093, empPensionPct:22.5,
+             fd:{ ss:1, cashDraw:15, privateHealth:25, ssCashDraw:10 },
+             children:1, cbAnnual:2078.40 };
+}
+function getPsConfig() {
+    if (!store.settings.payslipData) store.settings.payslipData = { config: defaultPsConfig(), history: {} };
+    return store.settings.payslipData.config;
+}
+
+// --- Tax calc ---
+function psCalcYear(config, pensionOverride) {
+    const ty = PS_RATES[config.taxYear] || PS_RATES['2025-26'];
+    const pct = (pensionOverride != null) ? pensionOverride : config.pensionPct;
+    const mBasic = config.annualBasic / 12;
+    const mCar = config.carAllowance / 12;
+    const mPension = mBasic * (pct / 100);
+    const pa = config.taxCodeNum * 10;
+    let ytdG = 0, ytdT = 0, ytdNI = 0;
+    return Array.from({length:12}, (_, i) => {
+        const p = i + 1;
+        const bonus = (config.bonusPeriod > 0 && config.bonusPeriod === p) ? (config.bonus || 0) : 0;
+        const gross = mBasic - mPension + mCar + bonus;
+        ytdG += gross;
+        // Pro-rated cumulative PAYE
+        const cumAllowance = (pa / 12) * p;
+        const ytdTaxable = Math.max(0, ytdG - cumAllowance);
+        const proBasic = (ty.bw / 12) * p;
+        const proHigher = ((ty.bw + ty.hw) / 12) * p;
+        let cumTax = Math.min(ytdTaxable, proBasic) * ty.br;
+        if (ytdTaxable > proBasic) cumTax += Math.min(ytdTaxable - proBasic, proHigher - proBasic) * ty.hr;
+        if (ytdTaxable > proHigher) cumTax += (ytdTaxable - proHigher) * ty.ar;
+        const tax = Math.max(0, cumTax - ytdT); ytdT = cumTax;
+        // NI
+        const niLo = ty.niPT / 12, niHi = ty.niUEL / 12;
+        const ni = Math.max(0, Math.min(gross, niHi) - niLo) * ty.ni1 + Math.max(0, gross - niHi) * ty.ni2;
+        ytdNI += ni;
+        const fd = config.fd || {};
+        const fdTotal = (fd.ss||0) + (fd.cashDraw||0) + (fd.privateHealth||0) + (fd.ssCashDraw||0);
+        const empNI = Math.max(0, gross - ty.niEmpST/12) * ty.niEmpRate;
+        const empPension = mBasic * ((config.empPensionPct||0) / 100);
+        return { p, month: PS_MONTHS[i], mBasic, mCar, bonus, mPension, gross, tax, ni, fd, fdTotal,
+                 totalDed: tax + ni + fdTotal, netPay: gross - tax - ni - fdTotal,
+                 empNI, empPension, ytdG, ytdT, ytdNI };
+    });
+}
+
+function psAdjustedIncome(config) {
+    // Adjusted net income for HICBC = annual gross for tax (pension already deducted)
+    const periods = psCalcYear(config, null);
+    return periods.reduce((s, p) => s + p.gross, 0);
+}
+
+function psCalcHICBC(config) {
+    const ty = PS_RATES[config.taxYear] || PS_RATES['2025-26'];
+    const adjIncome = psAdjustedIncome(config);
+    const annualCB = config.cbAnnual || 0;
+    if (adjIncome <= ty.hicbcLo) return { rate:0, charge:0, netCB:annualCB, adjIncome };
+    if (adjIncome >= ty.hicbcHi) return { rate:1, charge:annualCB, netCB:0, adjIncome };
+    const rate = (adjIncome - ty.hicbcLo) / (ty.hicbcHi - ty.hicbcLo);
+    const charge = Math.round(rate * annualCB * 100) / 100;
+    return { rate, charge, netCB: annualCB - charge, adjIncome };
+}
+
+// --- PIN ---
+async function initPayslipTab() {
+    const hasPIN = localStorage.getItem(PS_PIN_KEY);
+    psPinMode = hasPIN ? 'unlock' : 'setup';
+    document.getElementById('payslipLockTitle').textContent = hasPIN ? 'Payslip PIN' : 'Create Payslip PIN';
+    document.getElementById('payslipLockSub').textContent = hasPIN ? 'Enter your payslip PIN' : 'Set a 4-digit PIN to protect payslip data';
+    if (psUnlocked) { showPayslipContent(); return; }
+    document.getElementById('payslipLockScreen').style.display = 'flex';
+    document.getElementById('payslipContent').style.display = 'none';
+    psPinEntry = ''; updatePsDots();
+}
+
+function psPin(d) {
+    if (psPinEntry.length >= 4) return;
+    psPinEntry += d; updatePsDots();
+    if (psPinEntry.length === 4) setTimeout(submitPsPin, 150);
+}
+function psPinDel() { psPinEntry = psPinEntry.slice(0,-1); updatePsDots(); }
+function psPinClear() { psPinEntry = ''; updatePsDots(); }
+function updatePsDots() {
+    for (let i=0;i<4;i++) {
+        const d = document.getElementById('psDot'+i);
+        if (d) d.classList.toggle('filled', i < psPinEntry.length);
+    }
+}
+
+async function submitPsPin() {
+    const salt = localStorage.getItem(PS_PIN_SALT) || 'payslip_salt_v1';
+    if (psPinMode === 'setup') {
+        if (!psPinSetup) { psPinSetup = psPinEntry; psPinEntry = ''; updatePsDots();
+            document.getElementById('payslipLockSub').textContent = 'Confirm your PIN';
+            document.getElementById('payslipPinErr').textContent = ''; return; }
+        if (psPinEntry !== psPinSetup) {
+            psPinSetup = ''; psPinEntry = ''; updatePsDots();
+            document.getElementById('payslipPinErr').textContent = "PINs didn't match — try again"; return; }
+        const newSalt = Math.random().toString(36).slice(2);
+        const hash = await hashPin(psPinEntry, newSalt);
+        localStorage.setItem(PS_PIN_KEY, hash); localStorage.setItem(PS_PIN_SALT, newSalt);
+        psPinSetup = ''; psUnlocked = true; showPayslipContent(); return;
+    }
+    const stored = localStorage.getItem(PS_PIN_KEY);
+    const hash = await hashPin(psPinEntry, salt);
+    if (hash === stored) { psUnlocked = true; showPayslipContent(); }
+    else { psPinEntry = ''; updatePsDots(); document.getElementById('payslipPinErr').textContent = 'Incorrect PIN'; }
+}
+
+function showPayslipContent() {
+    document.getElementById('payslipLockScreen').style.display = 'none';
+    document.getElementById('payslipContent').style.display = 'block';
+    switchPsTab('payslip');
+}
+
+function lockPayslip() { psUnlocked = false; initPayslipTab(); }
+
+// --- Sub-tab switching ---
+function switchPsTab(tab) {
+    document.querySelectorAll('.ps-tab').forEach(b => b.classList.remove('active'));
+    const el = document.getElementById('psTab_' + tab); if (el) el.classList.add('active');
+    ['payslip','simulator','childbenefit','history'].forEach(t => {
+        const p = document.getElementById('pane_' + t); if (p) p.style.display = t === tab ? 'block' : 'none';
+    });
+    if (tab === 'payslip') renderPsPayslip();
+    if (tab === 'simulator') renderPsSimulator();
+    if (tab === 'childbenefit') renderPsCB();
+    if (tab === 'history') renderPsHistory();
+}
+
+function setPayslipPeriod(p) { psCurrentPeriod = p; renderPsPayslip(); }
+
+// --- Render payslip ---
+function renderPsPayslip() {
+    const config = getPsConfig();
+    const periods = psCalcYear(config, null);
+    const d = periods[psCurrentPeriod - 1];
+    const fd = config.fd || {};
+    const taxYearStart = parseInt(config.taxYear.split('-')[0]);
+
+    document.getElementById('psPeriodSelector').innerHTML = PS_MONTHS.map((m, i) => {
+        const yr = i < 9 ? taxYearStart : taxYearStart + 1;
+        return `<button onclick="setPayslipPeriod(${i+1})" style="padding:4px 10px;border-radius:12px;border:1px solid var(--border);cursor:pointer;font-size:0.75rem;
+            background:${i+1===psCurrentPeriod?'var(--accent)':'var(--card)'};color:${i+1===psCurrentPeriod?'#fff':'var(--text)'}">${m.slice(0,3)}'${String(yr).slice(2)}</button>`;
+    }).join('');
+
+    document.getElementById('psPayslipCard').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:720px">
+        <!-- Payments -->
+        <div class="ps-section">
+            <div class="ps-section-title">Payments</div>
+            <div class="ps-row"><span class="ps-label">Salary Sacrifice Pension</span><span style="color:var(--red)">-£${d.mPension.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">Basic</span><span>£${d.mBasic.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">Car Allowance</span><span>£${d.mCar.toFixed(2)}</span></div>
+            ${d.bonus>0?`<div class="ps-row"><span class="ps-label">Bonus</span><span>£${d.bonus.toFixed(2)}</span></div>`:''}
+            <div class="ps-row" style="font-weight:700;margin-top:4px"><span>Gross Pay</span><span>£${d.gross.toFixed(2)}</span></div>
+        </div>
+        <!-- Deductions -->
+        <div class="ps-section">
+            <div class="ps-section-title">Deductions</div>
+            <div class="ps-row"><span class="ps-label">Tax</span><span>£${d.tax.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">NI – A</span><span>£${d.ni.toFixed(2)}</span></div>
+            ${fd.ss?`<div class="ps-row"><span class="ps-label">Sports &amp; Social</span><span>£${fd.ss.toFixed(2)}</span></div>`:''}
+            ${fd.cashDraw?`<div class="ps-row"><span class="ps-label">Cash Draw</span><span>£${fd.cashDraw.toFixed(2)}</span></div>`:''}
+            ${fd.privateHealth?`<div class="ps-row"><span class="ps-label">Private Health</span><span>£${fd.privateHealth.toFixed(2)}</span></div>`:''}
+            ${fd.ssCashDraw?`<div class="ps-row"><span class="ps-label">S&amp;S Cash Draw</span><span>£${fd.ssCashDraw.toFixed(2)}</span></div>`:''}
+            <div class="ps-row" style="font-weight:700;margin-top:4px"><span>Total Deductions</span><span>£${d.totalDed.toFixed(2)}</span></div>
+        </div>
+        <!-- This Period -->
+        <div class="ps-section">
+            <div class="ps-section-title">This Period</div>
+            <div class="ps-row"><span class="ps-label">Taxable Pay</span><span>£${d.gross.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">Pensionable Pay</span><span>£${d.mBasic.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">Employer NI</span><span>£${d.empNI.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">Employer Pension</span><span>£${(d.empPension+d.mPension).toFixed(2)}</span></div>
+        </div>
+        <!-- YTD -->
+        <div class="ps-section">
+            <div class="ps-section-title">Year to Date</div>
+            <div class="ps-row"><span class="ps-label">Tax Paid</span><span>£${d.ytdT.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">NI Paid</span><span>£${d.ytdNI.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">Taxable Pay YTD</span><span>£${d.ytdG.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">Tax Code</span><span>${config.taxCodeNum}L</span></div>
+        </div>
+    </div>
+    <!-- Net Pay -->
+    <div class="ps-net" style="max-width:720px;margin-top:12px">
+        <span style="color:#fff;font-size:1rem;font-weight:700">NET PAY — ${d.month}</span>
+        <span style="color:#fff;font-size:1.6rem;font-weight:700">£${d.netPay.toFixed(2)}</span>
+    </div>
+    <!-- Annual summary -->
+    <div style="max-width:720px;margin-top:16px">
+        <div style="font-size:0.75rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Full Year Projection (${config.taxYear})</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">
+            ${[
+                ['Annual Gross', periods.reduce((s,x)=>s+x.gross,0)],
+                ['Annual Tax', periods.reduce((s,x)=>s+x.tax,0)],
+                ['Annual NI', periods.reduce((s,x)=>s+x.ni,0)],
+                ['Annual Pension', periods.reduce((s,x)=>s+x.mPension,0)],
+                ['Annual Net', periods.reduce((s,x)=>s+x.netPay,0)]
+            ].map(([label,val])=>`<div class="ps-section" style="margin:0"><div class="ps-section-title">${label}</div><div style="font-size:1rem;font-weight:700">£${val.toFixed(0)}</div></div>`).join('')}
+        </div>
+    </div>`;
+}
+
+// --- Pension Simulator ---
+function renderPsSimulator() {
+    const config = getPsConfig();
+    const slider = document.getElementById('psSimSlider');
+    if (!slider.dataset.init) { slider.value = config.pensionPct; slider.dataset.init = '1'; }
+    const simPct = parseFloat(slider.value);
+    document.getElementById('psSimPctLabel').textContent = simPct + '%';
+
+    const current = psCalcYear(config, config.pensionPct);
+    const sim = psCalcYear(config, simPct);
+    const months = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar'];
+
+    const fmt = v => (v >= 0 ? '+' : '') + '£' + Math.abs(v).toFixed(2);
+    const fmtA = v => (v >= 0 ? '+' : '') + '£' + Math.abs(v).toFixed(0);
+    const annC = (fn) => current.reduce((s,x)=>s+fn(x),0);
+    const annS = (fn) => sim.reduce((s,x)=>s+fn(x),0);
+
+    const dNetAnn = annS(x=>x.netPay) - annC(x=>x.netPay);
+    const dTaxAnn = annS(x=>x.tax) - annC(x=>x.tax);
+    const dNIAnn = annS(x=>x.ni) - annC(x=>x.ni);
+    const dPensAnn = annS(x=>x.mPension) - annC(x=>x.mPension);
+
+    document.getElementById('psSimResults').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:20px">
+        ${[
+            ['Net Pay/yr', dNetAnn, dNetAnn>=0],
+            ['Tax/yr', dTaxAnn, dTaxAnn<=0],
+            ['NI/yr', dNIAnn, dNIAnn<=0],
+            ['Pension/yr', dPensAnn, dPensAnn>=0]
+        ].map(([l,v,good])=>`<div class="ps-section" style="margin:0;border-color:${good?'var(--green)':'var(--red)'}">
+            <div class="ps-section-title">${l}</div>
+            <div style="font-size:1rem;font-weight:700;color:${good?'var(--green)':'var(--red)'}">${fmtA(v)}</div>
+        </div>`).join('')}
+    </div>
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:0.8rem;min-width:500px">
+        <thead>
+            <tr style="border-bottom:2px solid var(--border)">
+                <th style="text-align:left;padding:6px 8px">Month</th>
+                <th style="text-align:right;padding:6px 8px">Current Net</th>
+                <th style="text-align:right;padding:6px 8px">Sim Net (${simPct}%)</th>
+                <th style="text-align:right;padding:6px 8px">Δ Net</th>
+                <th style="text-align:right;padding:6px 8px">Sim Tax</th>
+                <th style="text-align:right;padding:6px 8px">Sim NI</th>
+                <th style="text-align:right;padding:6px 8px">Sim Pension</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${current.map((c,i)=>{const s=sim[i];const dn=s.netPay-c.netPay;return`<tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:5px 8px">${months[i]}</td>
+                <td style="padding:5px 8px;text-align:right">£${c.netPay.toFixed(2)}</td>
+                <td style="padding:5px 8px;text-align:right;font-weight:600">£${s.netPay.toFixed(2)}</td>
+                <td style="padding:5px 8px;text-align:right;color:${dn>=0?'var(--green)':'var(--red)'}">${fmt(dn)}</td>
+                <td style="padding:5px 8px;text-align:right">£${s.tax.toFixed(2)}</td>
+                <td style="padding:5px 8px;text-align:right">£${s.ni.toFixed(2)}</td>
+                <td style="padding:5px 8px;text-align:right">£${s.mPension.toFixed(2)}</td>
+            </tr>`}).join('')}
+        </tbody>
+        <tfoot>
+            <tr style="font-weight:700;border-top:2px solid var(--border)">
+                <td style="padding:6px 8px">Annual</td>
+                <td style="padding:6px 8px;text-align:right">£${annC(x=>x.netPay).toFixed(0)}</td>
+                <td style="padding:6px 8px;text-align:right">£${annS(x=>x.netPay).toFixed(0)}</td>
+                <td style="padding:6px 8px;text-align:right;color:${dNetAnn>=0?'var(--green)':'var(--red)'}">${fmtA(dNetAnn)}</td>
+                <td style="padding:6px 8px;text-align:right">£${annS(x=>x.tax).toFixed(0)}</td>
+                <td style="padding:6px 8px;text-align:right">£${annS(x=>x.ni).toFixed(0)}</td>
+                <td style="padding:6px 8px;text-align:right">£${annS(x=>x.mPension).toFixed(0)}</td>
+            </tr>
+        </tfoot>
+    </table></div>`;
+}
+
+// --- Child Benefit ---
+function renderPsCB() {
+    const config = getPsConfig();
+    const hicbc = psCalcHICBC(config);
+    const ty = PS_RATES[config.taxYear] || PS_RATES['2025-26'];
+    const adjStr = '£' + Math.round(hicbc.adjIncome).toLocaleString();
+
+    document.getElementById('psCBContent').innerHTML = `
+    <h3 style="margin:0 0 4px;font-size:1rem">Child Benefit & High Income Charge</h3>
+    <p style="color:var(--text-dim);font-size:0.82rem;margin:0 0 16px">Based on your adjusted net income (gross after pension sacrifice). Self-assessment liability for ${config.taxYear}.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="ps-section"><div class="ps-section-title">Adjusted Net Income</div><div style="font-size:1.1rem;font-weight:700">${adjStr}</div><div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px">Threshold: £${ty.hicbcLo.toLocaleString()}</div></div>
+        <div class="ps-section"><div class="ps-section-title">CB Received (annual)</div><div style="font-size:1.1rem;font-weight:700">£${config.cbAnnual.toFixed(2)}</div><div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px">£${(config.cbAnnual/12).toFixed(2)}/month</div></div>
+        <div class="ps-section" style="border-color:${hicbc.charge>0?'var(--red)':'var(--green)'}"><div class="ps-section-title">HICBC Rate</div><div style="font-size:1.1rem;font-weight:700;color:${hicbc.charge>0?'var(--red)':'var(--green)'}">${(hicbc.rate*100).toFixed(1)}%</div></div>
+        <div class="ps-section" style="border-color:${hicbc.charge>0?'var(--red)':'var(--green)'}"><div class="ps-section-title">Annual Charge</div><div style="font-size:1.1rem;font-weight:700;color:${hicbc.charge>0?'var(--red)':'var(--green)'}">£${hicbc.charge.toFixed(2)}</div><div style="font-size:0.75rem;color:var(--text-dim);margin-top:2px">Net CB: £${hicbc.netCB.toFixed(2)}</div></div>
+    </div>
+    ${hicbc.charge > 0 ? `
+    <div class="ps-section" style="background:rgba(255,100,100,0.08);border-color:var(--red)">
+        <div class="ps-section-title" style="color:var(--red)">Self Assessment — Estimated Amount Owed</div>
+        <div style="font-size:1.5rem;font-weight:700;color:var(--red)">£${hicbc.charge.toFixed(2)}</div>
+        <div style="font-size:0.8rem;color:var(--text-dim);margin-top:6px">£${(hicbc.charge/12).toFixed(2)}/month to set aside &nbsp;·&nbsp; Due January ${parseInt(config.taxYear.split('-')[0])+2} via Self Assessment</div>
+    </div>` : `
+    <div class="ps-section" style="background:rgba(0,200,100,0.08);border-color:var(--green)">
+        <div style="font-size:0.9rem;color:var(--green);font-weight:600">✓ No Child Benefit charge — income is below the threshold</div>
+    </div>`}
+    <div style="margin-top:16px">
+        <div style="font-size:0.75rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;margin-bottom:8px">Pension Impact on HICBC</div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+            <thead><tr style="border-bottom:2px solid var(--border)">
+                <th style="text-align:left;padding:5px 8px">Pension %</th>
+                <th style="text-align:right;padding:5px 8px">Adj. Income</th>
+                <th style="text-align:right;padding:5px 8px">HICBC</th>
+                <th style="text-align:right;padding:5px 8px">Net CB</th>
+            </tr></thead>
+            <tbody>${[0,5,10,15,18,20,25,30,35,40].map(pct => {
+                const sim = { ...config, pensionPct: pct };
+                const h = psCalcHICBC(sim);
+                const current = pct === config.pensionPct;
+                return `<tr style="border-bottom:1px solid var(--border);${current?'background:rgba(var(--accent-rgb,0,180,130),0.08);font-weight:700':''}">
+                    <td style="padding:5px 8px">${pct}%${current?' ◀ current':''}</td>
+                    <td style="padding:5px 8px;text-align:right">£${Math.round(h.adjIncome).toLocaleString()}</td>
+                    <td style="padding:5px 8px;text-align:right;color:${h.charge>0?'var(--red)':'var(--green)'}">£${h.charge.toFixed(0)}</td>
+                    <td style="padding:5px 8px;text-align:right">£${h.netCB.toFixed(0)}</td>
+                </tr>`;
+            }).join('')}</tbody>
+        </table></div>
+    </div>`;
+}
+
+// --- History ---
+function renderPsHistory() {
+    const data = store.settings.payslipData || {};
+    const history = data.history || {};
+    const years = Object.keys(history).sort().reverse();
+    document.getElementById('psHistoryContent').innerHTML = years.length === 0
+        ? '<p style="color:var(--text-dim);font-size:0.85rem">No previous years saved yet. Previous tax year configs will be stored here automatically.</p>'
+        : years.map(yr => {
+            const cfg = history[yr];
+            const periods = psCalcYear(cfg, null);
+            const totals = { gross: periods.reduce((s,x)=>s+x.gross,0), tax: periods.reduce((s,x)=>s+x.tax,0), ni: periods.reduce((s,x)=>s+x.ni,0), net: periods.reduce((s,x)=>s+x.netPay,0) };
+            return `<div class="ps-section" style="margin-bottom:12px">
+                <div style="font-size:0.9rem;font-weight:700;margin-bottom:8px">Tax Year ${yr}</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px">
+                    ${[['Gross',totals.gross],['Tax',totals.tax],['NI',totals.ni],['Net',totals.net]].map(([l,v])=>`<div><div style="font-size:0.72rem;color:var(--text-dim)">${l}</div><div style="font-weight:600">£${v.toFixed(0)}</div></div>`).join('')}
+                </div>
+            </div>`;
+        }).join('');
+}
+
+// --- Config modal ---
+function openPayslipConfig() {
+    const c = getPsConfig();
+    document.getElementById('psCfgTaxYear').value = c.taxYear;
+    document.getElementById('psCfgTaxCode').value = c.taxCodeNum;
+    document.getElementById('psCfgBasic').value = c.annualBasic;
+    document.getElementById('psCfgCar').value = c.carAllowance;
+    document.getElementById('psCfgBonus').value = c.bonus;
+    document.getElementById('psCfgBonusPeriod').value = c.bonusPeriod;
+    document.getElementById('psCfgPension').value = c.pensionPct;
+    document.getElementById('psCfgEmpPension').value = c.empPensionPct;
+    const fd = c.fd || {};
+    document.getElementById('psCfgSS').value = fd.ss || '';
+    document.getElementById('psCfgCD').value = fd.cashDraw || '';
+    document.getElementById('psCfgPH').value = fd.privateHealth || '';
+    document.getElementById('psCfgSSCD').value = fd.ssCashDraw || '';
+    document.getElementById('psCfgChildren').value = c.children || 0;
+    document.getElementById('psCfgCBAmount').value = c.cbAnnual || '';
+    document.getElementById('payslipConfigModal').style.display = 'flex';
+}
+
+function closePayslipConfig() { document.getElementById('payslipConfigModal').style.display = 'none'; }
+
+function savePayslipConfig() {
+    const c = getPsConfig();
+    // Archive current year to history before saving if tax year changes
+    const newYear = document.getElementById('psCfgTaxYear').value;
+    if (newYear !== c.taxYear) {
+        if (!store.settings.payslipData.history) store.settings.payslipData.history = {};
+        store.settings.payslipData.history[c.taxYear] = JSON.parse(JSON.stringify(c));
+    }
+    c.taxYear = newYear;
+    c.taxCodeNum = parseInt(document.getElementById('psCfgTaxCode').value) || c.taxCodeNum;
+    c.annualBasic = parseFloat(document.getElementById('psCfgBasic').value) || c.annualBasic;
+    c.carAllowance = parseFloat(document.getElementById('psCfgCar').value) || 0;
+    c.bonus = parseFloat(document.getElementById('psCfgBonus').value) || 0;
+    c.bonusPeriod = parseInt(document.getElementById('psCfgBonusPeriod').value) || 0;
+    c.pensionPct = parseFloat(document.getElementById('psCfgPension').value) || c.pensionPct;
+    c.empPensionPct = parseFloat(document.getElementById('psCfgEmpPension').value) || 0;
+    c.fd = {
+        ss: parseFloat(document.getElementById('psCfgSS').value) || 0,
+        cashDraw: parseFloat(document.getElementById('psCfgCD').value) || 0,
+        privateHealth: parseFloat(document.getElementById('psCfgPH').value) || 0,
+        ssCashDraw: parseFloat(document.getElementById('psCfgSSCD').value) || 0
+    };
+    c.children = parseInt(document.getElementById('psCfgChildren').value) || 0;
+    c.cbAnnual = parseFloat(document.getElementById('psCfgCBAmount').value) || 0;
+    saveStore();
+    if (getApiUrl()) apiCall('saveSettings', { settings: buildSettingsPayload() });
+    closePayslipConfig();
+    document.getElementById('psSimSlider').dataset.init = '';
+    switchPsTab(document.querySelector('.ps-tab.active')?.id?.replace('psTab_','') || 'payslip');
+    showToast('Payslip config saved', 'success');
+}
+
 // ===================== SAVINGS GOALS =====================
 function openSavingsGoalModal(index) {
     const modal = document.getElementById('savingsGoalModal');
@@ -5873,11 +6410,16 @@ let editingExpensePotId = null;
 
 function switchDashTab(tab) {
     document.querySelectorAll('.dash-tab').forEach(b => b.classList.remove('active'));
-    document.getElementById(tab === 'overview' ? 'tabOverview' : 'tabForecast').classList.add('active');
+    const tabMap = { overview: 'tabOverview', forecast: 'tabForecast', payslip: 'tabPayslip' };
+    const el = document.getElementById(tabMap[tab] || 'tabOverview');
+    if (el) el.classList.add('active');
     document.getElementById('dashboardContent').style.display = tab === 'overview' ? 'block' : 'none';
     const fc = document.getElementById('savingsForecastSection');
     if (fc) fc.style.display = tab === 'forecast' ? 'block' : 'none';
+    const ps = document.getElementById('payslipSection');
+    if (ps) ps.style.display = tab === 'payslip' ? 'block' : 'none';
     if (tab === 'forecast') { renderSavingsForecast(); renderSavingsTxHistory(); }
+    if (tab === 'payslip') { initPayslipTab(); }
 }
 
 function openAddPotModal(potId) {
