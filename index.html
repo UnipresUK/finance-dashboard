@@ -1709,21 +1709,31 @@
 <div id="payslipSection" style="display:none">
     <!-- Lock Screen -->
     <div id="payslipLockScreen" style="display:flex;align-items:center;justify-content:center;min-height:65vh">
-        <div style="text-align:center;max-width:320px;width:100%;padding:24px">
-            <div style="font-size:2.5rem;margin-bottom:8px">💷</div>
-            <h2 id="payslipLockTitle" style="margin:0 0 6px">Payslip PIN</h2>
-            <p id="payslipLockSub" style="font-size:0.82rem;color:var(--text-dim);margin:0 0 20px">Enter your payslip PIN to continue</p>
-            <div style="display:flex;gap:12px;justify-content:center;margin-bottom:20px">
-                <div class="pin-dot" id="psDot0"></div><div class="pin-dot" id="psDot1"></div>
-                <div class="pin-dot" id="psDot2"></div><div class="pin-dot" id="psDot3"></div>
+        <div class="pin-box">
+            <div style="font-size:2rem;margin-bottom:4px">💷</div>
+            <h2 id="payslipLockTitle">Payslip PIN</h2>
+            <p id="payslipLockSub">Enter your payslip PIN to continue</p>
+            <div class="pin-dots" id="psPinDots">
+                <div class="pin-dot"></div>
+                <div class="pin-dot"></div>
+                <div class="pin-dot"></div>
+                <div class="pin-dot"></div>
             </div>
-            <div class="pin-grid">
-                <button class="pin-btn" onclick="psPin(1)">1</button><button class="pin-btn" onclick="psPin(2)">2</button><button class="pin-btn" onclick="psPin(3)">3</button>
-                <button class="pin-btn" onclick="psPin(4)">4</button><button class="pin-btn" onclick="psPin(5)">5</button><button class="pin-btn" onclick="psPin(6)">6</button>
-                <button class="pin-btn" onclick="psPin(7)">7</button><button class="pin-btn" onclick="psPin(8)">8</button><button class="pin-btn" onclick="psPin(9)">9</button>
-                <button class="pin-btn" onclick="psPinClear()">Clear</button><button class="pin-btn" onclick="psPin(0)">0</button><button class="pin-btn" onclick="psPinDel()">⌫</button>
+            <div class="pin-keypad">
+                <button class="pin-key" onclick="psPin(1)">1</button>
+                <button class="pin-key" onclick="psPin(2)">2</button>
+                <button class="pin-key" onclick="psPin(3)">3</button>
+                <button class="pin-key" onclick="psPin(4)">4</button>
+                <button class="pin-key" onclick="psPin(5)">5</button>
+                <button class="pin-key" onclick="psPin(6)">6</button>
+                <button class="pin-key" onclick="psPin(7)">7</button>
+                <button class="pin-key" onclick="psPin(8)">8</button>
+                <button class="pin-key" onclick="psPin(9)">9</button>
+                <button class="pin-key fn" onclick="psPinClear()">Clear</button>
+                <button class="pin-key" onclick="psPin(0)">0</button>
+                <button class="pin-key fn" onclick="psPinDel()">Del</button>
             </div>
-            <p id="payslipPinErr" style="color:var(--red);font-size:0.8rem;margin-top:10px;min-height:18px"></p>
+            <div class="pin-error" id="payslipPinErr"></div>
         </div>
     </div>
 
@@ -1789,9 +1799,17 @@
                 <input type="number" id="psCfgCar" placeholder="e.g. 8568"></div>
             <div class="form-group"><label>Bonus Amount</label>
                 <input type="number" id="psCfgBonus" placeholder="e.g. 10000"></div>
-            <div class="form-group"><label>Bonus Period (1=Apr, 0=none)</label>
-                <input type="number" id="psCfgBonusPeriod" min="0" max="12" placeholder="0"></div>
-            <div class="form-group"><label>Employee Pension % (salary sacrifice)</label>
+            <div class="form-group"><label>Bonus Month</label>
+                <select id="psCfgBonusPeriod">
+                    <option value="0">None</option>
+                    <option value="1">April</option><option value="2">May</option>
+                    <option value="3">June</option><option value="4">July</option>
+                    <option value="5">August</option><option value="6">September</option>
+                    <option value="7">October</option><option value="8">November</option>
+                    <option value="9">December</option><option value="10">January</option>
+                    <option value="11">February</option><option value="12">March</option>
+                </select></div>
+            <div class="form-group"><label>Employee Pension % <span style="font-size:0.75rem;color:var(--text-dim)">(basic salary only)</span></label>
                 <input type="number" id="psCfgPension" step="0.5" placeholder="e.g. 18"></div>
             <div class="form-group"><label>Employer Pension %</label>
                 <input type="number" id="psCfgEmpPension" step="0.5" placeholder="e.g. 22.5"></div>
@@ -5932,10 +5950,11 @@ function psPin(d) {
 function psPinDel() { psPinEntry = psPinEntry.slice(0,-1); updatePsDots(); }
 function psPinClear() { psPinEntry = ''; updatePsDots(); }
 function updatePsDots() {
-    for (let i=0;i<4;i++) {
-        const d = document.getElementById('psDot'+i);
-        if (d) d.classList.toggle('filled', i < psPinEntry.length);
-    }
+    const dots = document.querySelectorAll('#psPinDots .pin-dot');
+    dots.forEach((d, i) => {
+        d.classList.toggle('filled', i < psPinEntry.length);
+        d.classList.remove('error');
+    });
 }
 
 async function submitPsPin() {
@@ -5955,7 +5974,11 @@ async function submitPsPin() {
     const stored = localStorage.getItem(PS_PIN_KEY);
     const hash = await hashPin(psPinEntry, salt);
     if (hash === stored) { psUnlocked = true; showPayslipContent(); }
-    else { psPinEntry = ''; updatePsDots(); document.getElementById('payslipPinErr').textContent = 'Incorrect PIN'; }
+    else {
+        document.querySelectorAll('#psPinDots .pin-dot').forEach(d => d.classList.add('error'));
+        document.getElementById('payslipPinErr').textContent = 'Incorrect PIN';
+        setTimeout(() => { psPinEntry = ''; updatePsDots(); }, 600);
+    }
 }
 
 function showPayslipContent() {
@@ -5991,8 +6014,11 @@ function renderPsPayslip() {
 
     document.getElementById('psPeriodSelector').innerHTML = PS_MONTHS.map((m, i) => {
         const yr = i < 9 ? taxYearStart : taxYearStart + 1;
+        const isBonus = config.bonusPeriod > 0 && config.bonusPeriod === i + 1;
         return `<button onclick="setPayslipPeriod(${i+1})" style="padding:4px 10px;border-radius:12px;border:1px solid var(--border);cursor:pointer;font-size:0.75rem;
-            background:${i+1===psCurrentPeriod?'var(--accent)':'var(--card)'};color:${i+1===psCurrentPeriod?'#fff':'var(--text)'}">${m.slice(0,3)}'${String(yr).slice(2)}</button>`;
+            background:${i+1===psCurrentPeriod?'var(--accent)':'var(--card)'};color:${i+1===psCurrentPeriod?'#fff':'var(--text)'};
+            ${isBonus&&i+1!==psCurrentPeriod?'border-color:var(--green)':''}">
+            ${m.slice(0,3)}'${String(yr).slice(2)}${isBonus?' 🎁':''}</button>`;
     }).join('');
 
     document.getElementById('psPayslipCard').innerHTML = `
@@ -6021,7 +6047,7 @@ function renderPsPayslip() {
         <div class="ps-section">
             <div class="ps-section-title">This Period</div>
             <div class="ps-row"><span class="ps-label">Taxable Pay</span><span>£${d.gross.toFixed(2)}</span></div>
-            <div class="ps-row"><span class="ps-label">Pensionable Pay</span><span>£${d.mBasic.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">Pensionable Pay <span style="font-size:0.7rem;color:var(--text-dim)">(basic only)</span></span><span>£${d.mBasic.toFixed(2)}</span></div>
             <div class="ps-row"><span class="ps-label">Employer NI</span><span>£${d.empNI.toFixed(2)}</span></div>
             <div class="ps-row"><span class="ps-label">Employer Pension</span><span>£${(d.empPension+d.mPension).toFixed(2)}</span></div>
         </div>
@@ -6115,8 +6141,11 @@ function renderPsSimulator() {
     // Period selector
     const periodSel = PS_MONTHS.map((m, i) => {
         const yr = i < 9 ? taxYearStart : taxYearStart + 1;
+        const isBonus = config.bonusPeriod > 0 && config.bonusPeriod === i + 1;
         return `<button onclick="setSimPeriod(${i+1})" style="padding:4px 10px;border-radius:12px;border:1px solid var(--border);cursor:pointer;font-size:0.75rem;
-            background:${i+1===psSimPeriod?'var(--accent)':'var(--card)'};color:${i+1===psSimPeriod?'#fff':'var(--text)'}">${m.slice(0,3)}'${String(yr).slice(2)}</button>`;
+            background:${i+1===psSimPeriod?'var(--accent)':'var(--card)'};color:${i+1===psSimPeriod?'#fff':'var(--text)'};
+            ${isBonus&&i+1!==psSimPeriod?'border-color:var(--green)':''}">
+            ${m.slice(0,3)}'${String(yr).slice(2)}${isBonus?' 🎁':''}</button>`;
     }).join('');
 
     document.getElementById('psSimResults').innerHTML = `
