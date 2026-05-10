@@ -5882,9 +5882,12 @@ function psCalcYear(config, pensionOverride) {
     const pct = (pensionOverride != null) ? pensionOverride : config.pensionPct;
     const mBasic = config.annualBasic / 12;
     const mCar = config.carAllowance / 12;
+    // Pension is salary sacrifice on basic salary only — car allowance and bonus excluded
     const mPension = mBasic * (pct / 100);
     const pa = config.taxCodeNum * 10;
     let ytdG = 0, ytdT = 0, ytdNI = 0;
+    // Cumulative band trackers for per-period breakdown
+    let ytdCB = 0, ytdCH = 0, ytdCA = 0;
     return Array.from({length:12}, (_, i) => {
         const p = i + 1;
         const bonus = (config.bonusPeriod > 0 && config.bonusPeriod === p) ? (config.bonus || 0) : 0;
@@ -5893,23 +5896,33 @@ function psCalcYear(config, pensionOverride) {
         // Pro-rated cumulative PAYE
         const cumAllowance = (pa / 12) * p;
         const ytdTaxable = Math.max(0, ytdG - cumAllowance);
-        const proBasic = (ty.bw / 12) * p;
+        const proBasic  = (ty.bw / 12) * p;
         const proHigher = ((ty.bw + ty.hw) / 12) * p;
-        let cumTax = Math.min(ytdTaxable, proBasic) * ty.br;
-        if (ytdTaxable > proBasic) cumTax += Math.min(ytdTaxable - proBasic, proHigher - proBasic) * ty.hr;
-        if (ytdTaxable > proHigher) cumTax += (ytdTaxable - proHigher) * ty.ar;
+        // Cumulative tax at each band
+        const cumTaxBasic      = Math.min(ytdTaxable, proBasic) * ty.br;
+        const cumTaxHigher     = ytdTaxable > proBasic  ? Math.min(ytdTaxable - proBasic, proHigher - proBasic) * ty.hr : 0;
+        const cumTaxAdditional = ytdTaxable > proHigher ? (ytdTaxable - proHigher) * ty.ar : 0;
+        const cumTax = cumTaxBasic + cumTaxHigher + cumTaxAdditional;
+        // Period breakdown (delta from last period's cumulative)
+        const taxBasic      = Math.max(0, cumTaxBasic      - ytdCB); ytdCB = cumTaxBasic;
+        const taxHigher     = Math.max(0, cumTaxHigher     - ytdCH); ytdCH = cumTaxHigher;
+        const taxAdditional = Math.max(0, cumTaxAdditional - ytdCA); ytdCA = cumTaxAdditional;
         const tax = Math.max(0, cumTax - ytdT); ytdT = cumTax;
-        // NI
+        // NI — split into main (8%) and upper (2%) bands
         const niLo = ty.niPT / 12, niHi = ty.niUEL / 12;
-        const ni = Math.max(0, Math.min(gross, niHi) - niLo) * ty.ni1 + Math.max(0, gross - niHi) * ty.ni2;
+        const niMain   = Math.max(0, Math.min(gross, niHi) - niLo) * ty.ni1;
+        const niHigher = Math.max(0, gross - niHi) * ty.ni2;
+        const ni = niMain + niHigher;
         ytdNI += ni;
         const fd = config.fd || {};
         const fdTotal = (fd.ss||0) + (fd.cashDraw||0) + (fd.privateHealth||0) + (fd.ssCashDraw||0);
         const empNI = Math.max(0, gross - ty.niEmpST/12) * ty.niEmpRate;
         const empPension = mBasic * ((config.empPensionPct||0) / 100);
-        return { p, month: PS_MONTHS[i], mBasic, mCar, bonus, mPension, gross, tax, ni, fd, fdTotal,
-                 totalDed: tax + ni + fdTotal, netPay: gross - tax - ni - fdTotal,
-                 empNI, empPension, ytdG, ytdT, ytdNI };
+        return { p, month: PS_MONTHS[i], mBasic, mCar, bonus, mPension, gross,
+                 tax, taxBasic, taxHigher, taxAdditional,
+                 ni, niMain, niHigher,
+                 fd, fdTotal, totalDed: tax + ni + fdTotal, netPay: gross - tax - ni - fdTotal,
+                 empNI, empPension, ytdG, ytdT, ytdNI, ytdCB, ytdCH, ytdCA };
     });
 }
 
@@ -6035,8 +6048,15 @@ function renderPsPayslip() {
         <!-- Deductions -->
         <div class="ps-section">
             <div class="ps-section-title">Deductions</div>
-            <div class="ps-row"><span class="ps-label">Tax</span><span>£${d.tax.toFixed(2)}</span></div>
-            <div class="ps-row"><span class="ps-label">NI – A</span><span>£${d.ni.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label" style="padding-left:2px;font-size:0.72rem;color:var(--text-dim)">Income Tax</span></div>
+            <div class="ps-row" style="padding-left:10px"><span class="ps-label">@ 20% (basic rate)</span><span>£${d.taxBasic.toFixed(2)}</span></div>
+            ${d.taxHigher>0.005?`<div class="ps-row" style="padding-left:10px"><span class="ps-label">@ 40% (higher rate)</span><span>£${d.taxHigher.toFixed(2)}</span></div>`:''}
+            ${d.taxAdditional>0.005?`<div class="ps-row" style="padding-left:10px"><span class="ps-label">@ 45% (additional)</span><span>£${d.taxAdditional.toFixed(2)}</span></div>`:''}
+            <div class="ps-row" style="font-weight:600"><span class="ps-label">Total Tax</span><span>£${d.tax.toFixed(2)}</span></div>
+            <div class="ps-row" style="padding-top:6px"><span class="ps-label" style="padding-left:2px;font-size:0.72rem;color:var(--text-dim)">National Insurance – A</span></div>
+            <div class="ps-row" style="padding-left:10px"><span class="ps-label">@ ${(PS_RATES[config.taxYear]||PS_RATES['2025-26']).ni1*100}% (up to £${Math.round((PS_RATES[config.taxYear]||PS_RATES['2025-26']).niUEL/12).toLocaleString()}/mo)</span><span>£${d.niMain.toFixed(2)}</span></div>
+            ${d.niHigher>0.005?`<div class="ps-row" style="padding-left:10px"><span class="ps-label">@ 2% (above £${Math.round((PS_RATES[config.taxYear]||PS_RATES['2025-26']).niUEL/12).toLocaleString()}/mo)</span><span>£${d.niHigher.toFixed(2)}</span></div>`:''}
+            <div class="ps-row" style="font-weight:600"><span class="ps-label">Total NI</span><span>£${d.ni.toFixed(2)}</span></div>
             ${fd.ss?`<div class="ps-row"><span class="ps-label">Sports &amp; Social</span><span>£${fd.ss.toFixed(2)}</span></div>`:''}
             ${fd.cashDraw?`<div class="ps-row"><span class="ps-label">Cash Draw</span><span>£${fd.cashDraw.toFixed(2)}</span></div>`:''}
             ${fd.privateHealth?`<div class="ps-row"><span class="ps-label">Private Health</span><span>£${fd.privateHealth.toFixed(2)}</span></div>`:''}
@@ -6054,9 +6074,12 @@ function renderPsPayslip() {
         <!-- YTD -->
         <div class="ps-section">
             <div class="ps-section-title">Year to Date</div>
-            <div class="ps-row"><span class="ps-label">Tax Paid</span><span>£${d.ytdT.toFixed(2)}</span></div>
-            <div class="ps-row"><span class="ps-label">NI Paid</span><span>£${d.ytdNI.toFixed(2)}</span></div>
             <div class="ps-row"><span class="ps-label">Taxable Pay YTD</span><span>£${d.ytdG.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">Tax @ 20% YTD</span><span>£${d.ytdCB.toFixed(2)}</span></div>
+            ${d.ytdCH>0.005?`<div class="ps-row"><span class="ps-label">Tax @ 40% YTD</span><span>£${d.ytdCH.toFixed(2)}</span></div>`:''}
+            ${d.ytdCA>0.005?`<div class="ps-row"><span class="ps-label">Tax @ 45% YTD</span><span>£${d.ytdCA.toFixed(2)}</span></div>`:''}
+            <div class="ps-row" style="font-weight:600"><span class="ps-label">Total Tax YTD</span><span>£${d.ytdT.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">NI Paid YTD</span><span>£${d.ytdNI.toFixed(2)}</span></div>
             <div class="ps-row"><span class="ps-label">Tax Code</span><span>${config.taxCodeNum}L</span></div>
         </div>
     </div>
@@ -6094,6 +6117,7 @@ function renderPsSimulator() {
     const sim     = psCalcYear(config, simPct);
     const taxYearStart = parseInt(config.taxYear.split('-')[0]);
     const fd = config.fd || {};
+    const ty = PS_RATES[config.taxYear] || PS_RATES['2025-26'];
 
     const c = current[psSimPeriod - 1];
     const s = sim[psSimPeriod - 1];
@@ -6187,8 +6211,15 @@ function renderPsSimulator() {
     <!-- DEDUCTIONS -->
     <div class="ps-section">
         <div class="ps-section-title">Deductions</div>
-        ${psRow('Tax', c.tax, s.tax, false, false)}
-        ${psRow('NI – A', c.ni, s.ni, false, false)}
+        <div class="ps-row"><span style="flex:2.2;font-size:0.72rem;color:var(--text-dim)">Income Tax</span></div>
+        ${psRow('&nbsp;&nbsp;@ 20% basic rate', c.taxBasic, s.taxBasic, false, false)}
+        ${(c.taxHigher>0.005||s.taxHigher>0.005)?psRow('&nbsp;&nbsp;@ 40% higher rate', c.taxHigher, s.taxHigher, false, false):''}
+        ${(c.taxAdditional>0.005||s.taxAdditional>0.005)?psRow('&nbsp;&nbsp;@ 45% additional', c.taxAdditional, s.taxAdditional, false, false):''}
+        ${psRowBold('Total Tax', c.tax, s.tax, false)}
+        <div class="ps-row" style="padding-top:6px"><span style="flex:2.2;font-size:0.72rem;color:var(--text-dim)">National Insurance – A</span></div>
+        ${psRow(`&nbsp;&nbsp;@ ${ty.ni1*100}% (up to £${Math.round(ty.niUEL/12).toLocaleString()}/mo)`, c.niMain, s.niMain, false, false)}
+        ${(c.niHigher>0.005||s.niHigher>0.005)?psRow('&nbsp;&nbsp;@ 2% (above UEL)', c.niHigher, s.niHigher, false, false):''}
+        ${psRowBold('Total NI', c.ni, s.ni, false)}
         ${fd.ss         ? psRow('Sports &amp; Social', fd.ss, fd.ss, true, false) : ''}
         ${fd.cashDraw   ? psRow('Cash Draw', fd.cashDraw, fd.cashDraw, true, false) : ''}
         ${fd.privateHealth ? psRow('Private Health', fd.privateHealth, fd.privateHealth, true, false) : ''}
@@ -6200,15 +6231,19 @@ function renderPsSimulator() {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
         <div class="ps-section" style="margin:0">
             <div class="ps-section-title">YTD — Current (${config.pensionPct}%)</div>
-            <div class="ps-row"><span class="ps-label">Tax Paid</span><span>£${c.ytdT.toFixed(2)}</span></div>
-            <div class="ps-row"><span class="ps-label">NI Paid</span><span>£${c.ytdNI.toFixed(2)}</span></div>
             <div class="ps-row"><span class="ps-label">Taxable Pay YTD</span><span>£${c.ytdG.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">Tax @ 20% YTD</span><span>£${c.ytdCB.toFixed(2)}</span></div>
+            ${c.ytdCH>0.005?`<div class="ps-row"><span class="ps-label">Tax @ 40% YTD</span><span>£${c.ytdCH.toFixed(2)}</span></div>`:''}
+            <div class="ps-row" style="font-weight:600"><span class="ps-label">Total Tax YTD</span><span>£${c.ytdT.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">NI Paid YTD</span><span>£${c.ytdNI.toFixed(2)}</span></div>
         </div>
         <div class="ps-section" style="margin:0">
             <div class="ps-section-title">YTD — Simulated (${simPct}%)</div>
-            <div class="ps-row"><span class="ps-label">Tax Paid</span><span>£${s.ytdT.toFixed(2)}</span></div>
-            <div class="ps-row"><span class="ps-label">NI Paid</span><span>£${s.ytdNI.toFixed(2)}</span></div>
             <div class="ps-row"><span class="ps-label">Taxable Pay YTD</span><span>£${s.ytdG.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">Tax @ 20% YTD</span><span>£${s.ytdCB.toFixed(2)}</span></div>
+            ${s.ytdCH>0.005?`<div class="ps-row"><span class="ps-label">Tax @ 40% YTD</span><span>£${s.ytdCH.toFixed(2)}</span></div>`:''}
+            <div class="ps-row" style="font-weight:600"><span class="ps-label">Total Tax YTD</span><span>£${s.ytdT.toFixed(2)}</span></div>
+            <div class="ps-row"><span class="ps-label">NI Paid YTD</span><span>£${s.ytdNI.toFixed(2)}</span></div>
         </div>
     </div>
 
@@ -6240,14 +6275,26 @@ function renderPsSimulator() {
             <th style="text-align:right;padding:6px 8px">Annual Change</th>
         </tr></thead>
         <tbody>
-            ${[['Gross Pay',x=>x.gross,true],['Tax',x=>x.tax,false],['NI',x=>x.ni,false],
-               ['Pension (employee)',x=>x.mPension,true],['Net Pay',x=>x.netPay,true]]
-              .map(([l,fn,gp])=>{const cv=annC(fn),sv=annS(fn),dv=sv-cv;
-                return `<tr style="border-bottom:1px solid var(--border)">
-                    <td style="padding:5px 8px">${l}</td>
-                    <td style="padding:5px 8px;text-align:right">£${cv.toFixed(0)}</td>
-                    <td style="padding:5px 8px;text-align:right;font-weight:600">£${sv.toFixed(0)}</td>
-                    <td style="padding:5px 8px;text-align:right">${deltaAnn(dv,gp)}</td>
+            ${[
+                ['Gross Pay',          x=>x.gross,          true,  false],
+                ['  Tax @ 20%',        x=>x.taxBasic,       false, true ],
+                ['  Tax @ 40%',        x=>x.taxHigher,      false, true ],
+                ['  Tax @ 45%',        x=>x.taxAdditional,  false, true ],
+                ['Total Tax',          x=>x.tax,            false, false],
+                [`  NI @ ${ty.ni1*100}%`, x=>x.niMain,      false, true ],
+                ['  NI @ 2%',          x=>x.niHigher,       false, true ],
+                ['Total NI',           x=>x.ni,             false, false],
+                ['Pension (employee)', x=>x.mPension,       true,  false],
+                ['Net Pay',            x=>x.netPay,         true,  false],
+            ].map(([l,fn,gp,dim])=>{
+                const cv=annC(fn), sv=annS(fn), dv=sv-cv;
+                if (dim && cv<0.5 && sv<0.5) return ''; // hide empty band rows
+                const isDim = dim;
+                return `<tr style="border-bottom:1px solid var(--border);${isDim?'color:var(--text-dim)':''}">
+                    <td style="padding:4px 8px;font-size:${isDim?'0.78':'0.81'}rem">${l}</td>
+                    <td style="padding:4px 8px;text-align:right">£${cv.toFixed(0)}</td>
+                    <td style="padding:4px 8px;text-align:right;font-weight:${isDim?'400':'600'};color:${isDim?'inherit':'var(--text)'}">£${sv.toFixed(0)}</td>
+                    <td style="padding:4px 8px;text-align:right">${deltaAnn(dv,gp)}</td>
                 </tr>`;}).join('')}
         </tbody>
     </table></div>
